@@ -13,6 +13,16 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
     environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      FLOCI_AUTH_ROOT_ACCESS_KEY_ID: ${FLOCI_AUTH_ROOT_ACCESS_KEY_ID}
+      # CTF security: IAM enforcement, strict bypass rules, and SigV4 validation.
+      # Set FLOCI_AUTH_ROOT_* on the host before `docker compose up` (operator credentials).
+      FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED: "true"
+      FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED: "true"
+      FLOCI_AUTH_VALIDATE_SIGNATURES: "true"
+      FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY: ${FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY}
+      FLOCI_AUTH_PRESIGN_SECRET: ${FLOCI_AUTH_PRESIGN_SECRET}
       FLOCI_SERVICES_DOCKER_NETWORK: floci_default
       FLOCI_SERVICES_RDS_PROXY_BASE_PORT: "7001"
       # FLOCI_STORAGE_HOST_PERSISTENT_PATH is no longer needed.

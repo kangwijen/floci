@@ -1,16 +1,28 @@
 package io.github.hectorvent.floci.services.rds.proxy;
 
+import io.github.hectorvent.floci.config.EmulatorConfig;
 import io.github.hectorvent.floci.services.iam.IamService;
 import io.github.hectorvent.floci.testutil.IamServiceTestHelper;
 import io.github.hectorvent.floci.testutil.SigV4TokenTestHelper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RdsSigV4ValidatorTest {
+
+    private static RdsSigV4Validator validator(IamService iamService) {
+        EmulatorConfig config = mock(EmulatorConfig.class);
+        EmulatorConfig.AuthConfig authConfig = mock(EmulatorConfig.AuthConfig.class);
+        when(config.auth()).thenReturn(authConfig);
+        when(authConfig.rootAccessKeyId()).thenReturn(Optional.empty());
+        return new RdsSigV4Validator(iamService, config);
+    }
 
     @Test
     void validateAcceptsTokenSignedByStandardSigV4() throws Exception {
@@ -18,7 +30,7 @@ class RdsSigV4ValidatorTest {
         String secretAccessKey = "oracle-secret-key-value";
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey(accessKeyId, secretAccessKey);
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
 
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.oracle-test.local",
@@ -38,7 +50,7 @@ class RdsSigV4ValidatorTest {
     void validateAcceptsTokenSignedWithHostAndPort() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -56,7 +68,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTokenWhenSignedForHostWithoutPort() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -75,7 +87,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsExpiredToken() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -93,7 +105,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTamperedSignature() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -112,7 +124,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTokenWithUnknownAccessKey() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -130,7 +142,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTokenMissingDbUser() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -149,7 +161,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTokenForWrongUser() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -168,7 +180,7 @@ class RdsSigV4ValidatorTest {
     void validateAcceptsTokenWhenClientUsernameIsNull() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -187,7 +199,7 @@ class RdsSigV4ValidatorTest {
     void validateAcceptsTokenWithUrlEncodedDbUser() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         // Username with characters that require URL encoding exercises the
         // encoding path independently of the validator's decode logic
         String token = SigV4TokenTestHelper.createRdsToken(
@@ -207,7 +219,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTokenWithWrongRegion() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,
@@ -227,7 +239,7 @@ class RdsSigV4ValidatorTest {
     void validateRejectsTokenMissingSignatureParameter() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDRDS", "secret-rds");
 
-        RdsSigV4Validator validator = new RdsSigV4Validator(iamService);
+        RdsSigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createRdsToken(
                 "db.example.local",
                 5432,

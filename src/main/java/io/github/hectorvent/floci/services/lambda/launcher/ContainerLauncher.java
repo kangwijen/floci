@@ -1,6 +1,7 @@
 package io.github.hectorvent.floci.services.lambda.launcher;
 
 import io.github.hectorvent.floci.config.EmulatorConfig;
+import io.github.hectorvent.floci.core.common.OperatorCredentialEnv;
 import io.github.hectorvent.floci.core.common.dns.EmbeddedDnsServer;
 import io.github.hectorvent.floci.core.common.docker.ContainerBuilder;
 import io.github.hectorvent.floci.core.common.docker.ContainerLifecycleManager;
@@ -186,13 +187,8 @@ public class ContainerLauncher {
             env.add("AWS_SHARED_CREDENTIALS_FILE=/opt/aws-config/credentials");
             env.add("AWS_CONFIG_FILE=/opt/aws-config/config");
         } else {
-            // Use Floci's own env vars, fallback to test/test/test
-            String ak = System.getenv("AWS_ACCESS_KEY_ID");
-            String sk = System.getenv("AWS_SECRET_ACCESS_KEY");
-            String st = System.getenv("AWS_SESSION_TOKEN");
-            env.add("AWS_ACCESS_KEY_ID=" + (ak != null ? ak : "test"));
-            env.add("AWS_SECRET_ACCESS_KEY=" + (sk != null ? sk : "test"));
-            env.add("AWS_SESSION_TOKEN=" + (st != null ? st : "test"));
+            // Use Floci's own env vars when set; omit credentials otherwise.
+            OperatorCredentialEnv.addIfPresent(env);
         }
         env.add("FLOCI_HOSTNAME=" + flociHostname);
         env.add("FLOCI_ENDPOINT=" + flociEndpoint);

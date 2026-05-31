@@ -5,6 +5,7 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.model.Frame;
 import io.github.hectorvent.floci.config.EmulatorConfig;
 import io.github.hectorvent.floci.core.common.AwsArnUtils;
+import io.github.hectorvent.floci.core.common.OperatorCredentialEnv;
 import io.github.hectorvent.floci.core.common.RegionResolver;
 import io.github.hectorvent.floci.core.common.AwsException;
 import io.github.hectorvent.floci.core.common.dns.EmbeddedDnsServer;
@@ -404,8 +405,7 @@ public class CodeBuildRunner {
         env.put("CODEBUILD_LOG_PATH", logStream);
         env.put("AWS_DEFAULT_REGION", region);
         env.put("AWS_REGION", region);
-        env.put("AWS_ACCESS_KEY_ID", "test");
-        env.put("AWS_SECRET_ACCESS_KEY", "test");
+        OperatorCredentialEnv.putIfPresent(env);
         env.put("AWS_ENDPOINT_URL", resolveEndpointUrl());
 
         env.putAll(buildspec.envVariables());

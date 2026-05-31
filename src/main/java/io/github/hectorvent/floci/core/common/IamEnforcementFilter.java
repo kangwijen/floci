@@ -27,10 +27,17 @@ import java.util.regex.Pattern;
  * <p>Bypass rules (request is always allowed through):
  * <ul>
  *   <li>Enforcement is disabled (default)</li>
- *   <li>Access key is {@code "test"} (root/admin stand-in)</li>
- *   <li>Access key is not found in the IAM store (backward-compatible with pre-existing credentials)</li>
- *   <li>The action cannot be resolved (unknown mapping → permissive)</li>
+ *   <li>Access key matches {@code floci.auth.root-access-key-id} when configured</li>
+ *   <li>No {@code Authorization} header (unless strict enforcement is enabled)</li>
+ *   <li>The action cannot be resolved (unknown mapping, permissive unless strict)</li>
  * </ul>
+ *
+ * <p>When both enforcement and strict enforcement are enabled, missing auth on non-internal
+ * paths and unmapped IAM actions are denied. Internal paths are {@code /health} and
+ * {@code /_floci/*} / {@code /_localstack/*} ({@link io.github.hectorvent.floci.lifecycle.HealthController},
+ * {@link io.github.hectorvent.floci.lifecycle.EmulatorInfoController}).
+ *
+ * <p>When enforcement is enabled, access keys not registered in the IAM store are denied.
  *
  * <p>Phase 1 evaluates identity-based policies only.
  * Resource-based policies (S3 bucket policy, Lambda resource policy, etc.) are Phase 2.
@@ -73,14 +80,31 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
             return;
         }
 
+        boolean strict = config.services().iam().strictEnforcementEnabled();
+
         String auth = ctx.getHeaderString("Authorization");
         if (auth == null) {
+            if (strict && !SecurityBypassPaths.isInternalHealthOrInfoPath(ctx.getUriInfo().getPath())) {
+                if (SecurityBypassPaths.isPresignedUrlRequest(ctx) && config.auth().validateSignatures()) {
+                    return;
+                }
+                LOG.infov("IAM strict enforcement DENY: missing Authorization header on {0}",
+                        ctx.getUriInfo().getPath());
+                ctx.abortWith(accessDeniedResponse("MissingAuthentication", null, ctx.getMediaType()));
+            }
             return;
         }
 
         String akid = accountResolver.extractAccessKeyId(auth);
-        if (akid == null || "test".equals(akid)) {
-            return; // root bypass
+        if (akid == null) {
+            return;
+        }
+        if (config.auth().rootAccessKeyId().filter(akid::equals).isPresent()) {
+            return; // configured root key bypass
+        }
+
+        if (SecurityBypassPaths.isPresignedUrlRequest(ctx) && config.auth().validateSignatures()) {
+            return; // signature verified by PreSignedUrlFilter
         }
 
         String credentialScope = extractCredentialScope(auth);
@@ -90,12 +114,20 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
 
         String action = actionRegistry.resolve(credentialScope, ctx);
         if (action == null) {
-            return; // unknown action → ALLOW (permissive)
+            if (strict) {
+                String unknownAction = credentialScope + ":*";
+                LOG.infov("IAM strict enforcement DENY: unmapped action scope={0} path={1}",
+                        credentialScope, ctx.getUriInfo().getPath());
+                ctx.abortWith(accessDeniedResponse(unknownAction, credentialScope, ctx.getMediaType()));
+            }
+            return;
         }
 
         List<String> policies = iamService.resolveCallerPolicies(akid);
         if (policies == null) {
-            return; // unknown access key → bypass (backward-compat)
+            LOG.infov("IAM enforcement DENY: unknown access key {0}", akid);
+            ctx.abortWith(accessDeniedResponse(action, credentialScope, ctx.getMediaType()));
+            return;
         }
 
         String region = config.defaultRegion();
@@ -112,6 +144,15 @@ public class IamEnforcementFilter implements ContainerRequestFilter {
     private String extractCredentialScope(String auth) {
         Matcher m = SERVICE_PATTERN.matcher(auth);
         return m.find() ? m.group(1) : null;
+    }
+
+    /**
+     * Paths served by {@link io.github.hectorvent.floci.lifecycle.HealthController} and
+     * {@link io.github.hectorvent.floci.lifecycle.EmulatorInfoController} that must stay
+     * reachable without SigV4 credentials even under strict enforcement.
+     */
+    static boolean isInternalHealthOrInfoPath(String path) {
+        return SecurityBypassPaths.isInternalHealthOrInfoPath(path);
     }
 
     /**

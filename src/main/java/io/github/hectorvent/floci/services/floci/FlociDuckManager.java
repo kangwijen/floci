@@ -1,6 +1,7 @@
 package io.github.hectorvent.floci.services.floci;
 
 import io.github.hectorvent.floci.config.EmulatorConfig;
+import io.github.hectorvent.floci.core.common.OperatorCredentialEnv;
 import io.github.hectorvent.floci.core.common.docker.ContainerBuilder;
 import io.github.hectorvent.floci.core.common.docker.ContainerDetector;
 import io.github.hectorvent.floci.core.common.docker.ContainerLifecycleManager;
@@ -15,6 +16,7 @@ import org.jboss.logging.Logger;
 
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -112,16 +114,21 @@ public class FlociDuckManager {
 
         lifecycleManager.removeIfExists(CONTAINER_NAME);
 
-        ContainerSpec spec = containerBuilder.newContainer(image)
+        ContainerBuilder.Builder specBuilder = containerBuilder.newContainer(image)
                 .withName(CONTAINER_NAME)
-                .withEnv("FLOCI_DUCK_S3_ACCESS_KEY", "test")
-                .withEnv("FLOCI_DUCK_S3_SECRET_KEY", "test")
                 .withEnv("FLOCI_DUCK_S3_REGION", config.defaultRegion())
                 .withPortBinding(DUCK_PORT, DUCK_PORT)
                 .withDockerNetwork(config.services().dockerNetwork())
                 .withEmbeddedDns()
-                .withLogRotation()
-                .build();
+                .withLogRotation();
+        Map<String, String> operatorCreds = OperatorCredentialEnv.snapshot();
+        if (operatorCreds.containsKey("AWS_ACCESS_KEY_ID")) {
+            specBuilder.withEnv("FLOCI_DUCK_S3_ACCESS_KEY", operatorCreds.get("AWS_ACCESS_KEY_ID"));
+        }
+        if (operatorCreds.containsKey("AWS_SECRET_ACCESS_KEY")) {
+            specBuilder.withEnv("FLOCI_DUCK_S3_SECRET_KEY", operatorCreds.get("AWS_SECRET_ACCESS_KEY"));
+        }
+        ContainerSpec spec = specBuilder.build();
 
         ContainerInfo info = lifecycleManager.createAndStart(spec);
         EndpointInfo endpoint = info.getEndpoint(DUCK_PORT);

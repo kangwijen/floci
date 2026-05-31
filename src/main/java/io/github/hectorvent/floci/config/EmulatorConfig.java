@@ -269,6 +269,29 @@ public interface EmulatorConfig {
 
         @WithDefault("local-emulator-secret")
         String presignSecret();
+
+        /**
+         * When set, this access key ID bypasses IAM enforcement (root stand-in).
+         * Env: FLOCI_AUTH_ROOT_ACCESS_KEY_ID. Leave unset for strict mode (no bypass).
+         */
+        Optional<String> rootAccessKeyId();
+
+        /**
+         * Secret access key paired with {@link #rootAccessKeyId()} for SigV4 validation
+         * when {@link #validateSignatures()} is enabled.
+         * Env: FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY.
+         */
+        Optional<String> rootSecretAccessKey();
+
+        /** Root secret from config, or {@code AWS_SECRET_ACCESS_KEY} when unset. */
+        default Optional<String> resolveRootSecretAccessKey() {
+            Optional<String> configured = rootSecretAccessKey();
+            if (configured.isPresent()) {
+                return configured;
+            }
+            String env = System.getenv("AWS_SECRET_ACCESS_KEY");
+            return env != null && !env.isBlank() ? Optional.of(env) : Optional.empty();
+        }
     }
 
     interface ServicesConfig {
@@ -435,6 +458,15 @@ public interface EmulatorConfig {
 
         @WithDefault("false")
         boolean enforcementEnabled();
+
+        /**
+         * When {@code true} together with {@link #enforcementEnabled()}, closes permissive
+         * bypasses: requests without an {@code Authorization} header (except Floci internal
+         * health/info paths) and requests whose IAM action cannot be resolved are denied.
+         * Env: FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED
+         */
+        @WithDefault("false")
+        boolean strictEnforcementEnabled();
     }
 
     interface MskServiceConfig {
@@ -869,7 +901,7 @@ public interface EmulatorConfig {
          * AWS_SHARED_CREDENTIALS_FILE and AWS_CONFIG_FILE are set to point at
          * the mounted files, ensuring SDK discovery works regardless of container HOME.
          * When absent, Floci injects credentials from its own environment
-         * (AWS_ACCESS_KEY_ID, etc.) or falls back to test/test/test.
+         * (AWS_ACCESS_KEY_ID, etc.) when set; otherwise no credentials are injected.
          * Blank values are treated as absent.
          *
          * Env var: FLOCI_SERVICES_LAMBDA_AWS_CONFIG_PATH

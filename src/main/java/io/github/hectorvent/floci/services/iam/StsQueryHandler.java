@@ -75,7 +75,7 @@ public class StsQueryHandler {
 
         // Register session so IAM enforcement can resolve the role's policies
         String sessionPolicy = getParam(params, "Policy");
-        iamService.registerSession(accessKeyId, roleArn, expiration, sessionPolicy);
+        iamService.registerSession(accessKeyId, roleArn, expiration, sessionPolicy, secretKey);
 
         String result = new XmlBuilder()
                 .raw(credentialsXml(accessKeyId, secretKey, sessionToken, expiration))
@@ -105,6 +105,10 @@ public class StsQueryHandler {
         String sessionToken = randomSecret(200);
         Instant expiration = Instant.now().plusSeconds(durationSeconds);
 
+        String accountId = regionResolver.getAccountId();
+        String sessionArn = AwsArnUtils.Arn.of("sts", "", accountId, "federated-user/floci-session").toString();
+        iamService.registerSession(accessKeyId, sessionArn, expiration, null, secretKey);
+
         String result = credentialsXml(accessKeyId, secretKey, sessionToken, expiration);
         return Response.ok(AwsQueryResponse.envelope("GetSessionToken", AwsNamespaces.STS, result)).build();
     }
@@ -131,7 +135,7 @@ public class StsQueryHandler {
         String provider = providerId != null && !providerId.isBlank() ? providerId : "accounts.google.com";
 
         String sessionPolicy = getParam(params, "Policy");
-        iamService.registerSession(accessKeyId, roleArn, expiration, sessionPolicy);
+        iamService.registerSession(accessKeyId, roleArn, expiration, sessionPolicy, secretKey);
 
         String result = new XmlBuilder()
                 .raw(credentialsXml(accessKeyId, secretKey, sessionToken, expiration))
@@ -166,7 +170,7 @@ public class StsQueryHandler {
         String assumedRoleArn = AwsArnUtils.Arn.of("sts", "", accountId, "assumed-role/" + roleName + "/" + sessionName).toString();
         String assumedRoleId = "AROA" + randomId(16) + ":" + sessionName;
 
-        iamService.registerSession(accessKeyId, roleArn, expiration, null);
+        iamService.registerSession(accessKeyId, roleArn, expiration, null, secretKey);
 
         String result = new XmlBuilder()
                 .raw(credentialsXml(accessKeyId, secretKey, sessionToken, expiration))
@@ -202,7 +206,7 @@ public class StsQueryHandler {
 
         String sessionPolicy = getParam(params, "Policy");
         // Register federation token so enforcement can scope its policies via session policy
-        iamService.registerSession(accessKeyId, federatedUserArn, expiration, sessionPolicy);
+        iamService.registerSession(accessKeyId, federatedUserArn, expiration, sessionPolicy, secretKey);
 
         String result = new XmlBuilder()
                 .raw(credentialsXml(accessKeyId, secretKey, sessionToken, expiration))

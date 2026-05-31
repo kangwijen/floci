@@ -2,6 +2,9 @@ package io.github.hectorvent.floci.services.ec2;
 
 import io.github.hectorvent.floci.config.EmulatorConfig;
 import io.github.hectorvent.floci.services.ec2.model.Instance;
+import io.github.hectorvent.floci.services.iam.IamService;
+import io.github.hectorvent.floci.services.iam.model.IamRole;
+import io.github.hectorvent.floci.services.iam.model.InstanceProfile;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.ext.web.Router;
@@ -18,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * IMDS-compatible HTTP server bound to port 9169 on the Floci host.
@@ -33,9 +37,12 @@ public class Ec2MetadataServer {
     private static final Logger LOG = Logger.getLogger(Ec2MetadataServer.class);
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
             .withZone(ZoneOffset.UTC);
+    private static final String SESSION_CHARS =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
     private final Vertx vertx;
     private final EmulatorConfig config;
+    private final IamService iamService;
 
     /** IMDSv2: token value → Instance */
     private final Map<String, Instance> tokenToInstance = new ConcurrentHashMap<>();
@@ -45,9 +52,10 @@ public class Ec2MetadataServer {
     private volatile HttpServer httpServer;
 
     @Inject
-    public Ec2MetadataServer(Vertx vertx, EmulatorConfig config) {
+    public Ec2MetadataServer(Vertx vertx, EmulatorConfig config, IamService iamService) {
         this.vertx = vertx;
         this.config = config;
+        this.iamService = iamService;
     }
 
     /** Called by Ec2ContainerManager after a container starts to register its IP. */
@@ -227,22 +235,42 @@ public class Ec2MetadataServer {
         if (inst == null) {
             return;
         }
-        if (inst.getIamInstanceProfileArn() == null) {
+        String profileArn = inst.getIamInstanceProfileArn();
+        if (profileArn == null) {
             ctx.response().setStatusCode(404).end();
             return;
         }
 
-        String expiration = ISO.format(Instant.now().plusSeconds(3600));
-        String body = "{\"Code\":\"Success\","
-                + "\"LastUpdated\":\"" + now() + "\","
-                + "\"Type\":\"AWS-HMAC\","
-                + "\"AccessKeyId\":\"test\","
-                + "\"SecretAccessKey\":\"test\","
-                + "\"Token\":\"test-session-token\","
-                + "\"Expiration\":\"" + expiration + "\"}";
-        ctx.response().setStatusCode(200)
-                .putHeader("content-type", "application/json")
-                .end(body);
+        try {
+            String profileName = extractProfileName(profileArn);
+            InstanceProfile profile = iamService.getInstanceProfile(profileName);
+            if (profile.getRoleNames().isEmpty()) {
+                ctx.response().setStatusCode(404).end();
+                return;
+            }
+            IamRole role = iamService.getRole(profile.getRoleNames().get(0));
+            int durationSeconds = 3600;
+            String accessKeyId = "ASIA" + randomId(16);
+            String secretKey = randomSecret(40);
+            String sessionToken = randomSecret(200);
+            Instant expiration = Instant.now().plusSeconds(durationSeconds);
+            iamService.registerSession(accessKeyId, role.getArn(), expiration, null, secretKey);
+
+            String body = "{\"Code\":\"Success\","
+                    + "\"LastUpdated\":\"" + now() + "\","
+                    + "\"Type\":\"AWS-HMAC\","
+                    + "\"AccessKeyId\":\"" + accessKeyId + "\","
+                    + "\"SecretAccessKey\":\"" + secretKey + "\","
+                    + "\"Token\":\"" + sessionToken + "\","
+                    + "\"Expiration\":\"" + ISO.format(expiration) + "\"}";
+            ctx.response().setStatusCode(200)
+                    .putHeader("content-type", "application/json")
+                    .end(body);
+        } catch (Exception e) {
+            LOG.warnv("IMDS: failed to issue credentials for instance {0}: {1}",
+                    inst.getInstanceId(), e.getMessage());
+            ctx.response().setStatusCode(404).end();
+        }
     }
 
     private void handleUserData(RoutingContext ctx) {
@@ -316,6 +344,23 @@ public class Ec2MetadataServer {
             return profileArn.substring(lastSlash + 1);
         }
         return "instance-role";
+    }
+
+    private static String extractProfileName(String profileArn) {
+        return extractRoleName(profileArn);
+    }
+
+    private static String randomId(int length) {
+        StringBuilder sb = new StringBuilder(length);
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (int i = 0; i < length; i++) {
+            sb.append(SESSION_CHARS.charAt(random.nextInt(SESSION_CHARS.length())));
+        }
+        return sb.toString();
+    }
+
+    private static String randomSecret(int length) {
+        return randomId(length);
     }
 
     private static String now() {

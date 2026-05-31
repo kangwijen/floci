@@ -22,8 +22,10 @@ Floci is configured exclusively through environment variables. Every option belo
 
 | Variable | Default | Description |
 |---|---|---|
-| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | When `true`, verifies AWS Signature V4 on every request. Leave `false` for local development |
-| `FLOCI_AUTH_PRESIGN_SECRET` | `local-emulator-secret` | Secret used to sign and verify pre-signed URLs |
+| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | When `true`, verifies SigV4 `Authorization` headers on inbound AWS API requests (IAM keys from the IAM store or the root operator pair). Also verifies Floci S3 pre-signed URLs via `FLOCI_AUTH_PRESIGN_SECRET` |
+| `FLOCI_AUTH_PRESIGN_SECRET` | `local-emulator-secret` | Secret used to sign and verify Floci-generated S3 pre-signed URLs (not real AWS SigV4) |
+| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | _(none)_ | Access key ID that bypasses IAM enforcement for operator provisioning. Leave unset for strict mode with no privileged bypass |
+| `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | _(none)_ | Secret access key paired with `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` for SigV4 validation when `FLOCI_AUTH_VALIDATE_SIGNATURES=true` |
 
 ## Browser CORS
 
@@ -200,6 +202,7 @@ See [Initialization Hooks](./initialization-hooks.md) for lifecycle phases and s
 |---|---|---|
 | `FLOCI_SERVICES_IAM_ENABLED` | `true` | Enable the IAM service |
 | `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED` | `false` | When `true`, enforce IAM policies on API calls. Leave `false` for most local development scenarios |
+| `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED` | `false` | When `true` with enforcement enabled, deny unregistered access keys and unknown IAM action mappings instead of allowing them through |
 
 ### KMS
 

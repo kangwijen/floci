@@ -265,7 +265,7 @@ FLOCI_DNS_EXTRA_SUFFIXES=localhost.localstack.cloud,localhost.example.internal
 
 ### Real AWS Credentials
 
-By default, Floci injects placeholder credentials (`test`/`test`/`test`) into Lambda containers. This is sufficient when all SDK calls target Floci's emulated services.
+By default, Floci injects `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` from its own environment into Lambda containers when those variables are set. When they are unset, no credentials are injected.
 
 For hybrid local/cloud testing — where some services are emulated and others hit real AWS — you can mount your host `~/.aws` directory into Lambda containers:
 
@@ -285,7 +285,7 @@ When `aws-config-path` is set:
 - `AWS_SHARED_CREDENTIALS_FILE` and `AWS_CONFIG_FILE` env vars are set so the SDK discovers credentials regardless of the container's HOME directory
 - No `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` env vars are injected
 
-When unset (default), Floci reads credentials from its own environment and falls back to `test`/`test`/`test`.
+When unset (default), Floci reads credentials from its own environment only; it does not inject placeholder credentials.
 
 !!! tip "Routing specific services to real AWS"
     To keep some services on Floci while others hit real AWS, clear the global endpoint and set service-specific overrides in your function's `--environment`:

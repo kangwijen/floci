@@ -3,6 +3,7 @@ package io.github.hectorvent.floci.services.floci;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.hectorvent.floci.config.EmulatorConfig;
+import io.github.hectorvent.floci.core.common.OperatorCredentialEnv;
 import io.github.hectorvent.floci.core.common.dns.EmbeddedDnsServer;
 import io.github.hectorvent.floci.core.common.docker.DockerHostResolver;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -126,9 +127,19 @@ public class FlociDuckClient {
         body.put("s3_region", config.defaultRegion());
         // A 12-digit access key flows through AccountResolver and selects the
         // matching account partition for any S3 read/write the SQL performs.
-        // Anything else falls back to the configured default account.
-        body.put("s3_access_key", accessKeyId == null || accessKeyId.isEmpty() ? "test" : accessKeyId);
-        body.put("s3_secret_key", "test");
+        // Credentials come from the caller or Floci's own environment when set.
+        Map<String, String> operatorCreds = OperatorCredentialEnv.snapshot();
+        String s3AccessKey = accessKeyId;
+        if (s3AccessKey == null || s3AccessKey.isEmpty()) {
+            s3AccessKey = operatorCreds.get("AWS_ACCESS_KEY_ID");
+        }
+        if (s3AccessKey != null && !s3AccessKey.isEmpty()) {
+            body.put("s3_access_key", s3AccessKey);
+        }
+        String s3SecretKey = operatorCreds.get("AWS_SECRET_ACCESS_KEY");
+        if (s3SecretKey != null && !s3SecretKey.isEmpty()) {
+            body.put("s3_secret_key", s3SecretKey);
+        }
         body.put("s3_url_style", "path");
         return body;
     }

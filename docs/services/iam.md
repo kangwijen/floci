@@ -85,14 +85,36 @@ Policy evaluation follows the standard AWS precedence:
 
 ### Bypass rules
 
-These identities always bypass enforcement (backward-compatible defaults):
+These identities bypass enforcement:
 
 | Identity | Behaviour |
 |---|---|
-| Access key `test` (the default dev credential) | Always allowed — no policy lookup |
-| Unknown access key (not in IAM store) | Always allowed — backward-compatible with pre-existing keys |
-| No `Authorization` header | Allowed — unauthenticated path (e.g. health checks) |
-| Unresolvable IAM action for the request | Allowed — unknown mappings are permissive |
+| Access key matching `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` and secret matching `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | Allowed when both are configured (operator root) |
+| No `Authorization` header | Allowed by default (health checks and unauthenticated paths) |
+| Unresolvable IAM action for the request | Allowed by default (unknown mappings are permissive) |
+
+When enforcement is enabled, access keys that are not registered in the IAM store are **denied** (HTTP 403). This closes the legacy `test`/`test` bypass path used in local development.
+
+### Strict enforcement (CTF hardening)
+
+Set `strict-enforcement-enabled: true` together with `enforcement-enabled: true` to close the remaining permissive bypasses. Strict mode is intended for CTF and security-hardened deployments, not everyday local development.
+
+**Environment variable:**
+```bash
+FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED=true
+```
+
+Under strict enforcement:
+
+| Case | Behaviour |
+|---|---|
+| No `Authorization` header on `/health`, `/_floci/*`, or `/_localstack/*` | Allowed (Floci internal health/info endpoints) |
+| No `Authorization` header on any other path | Denied (HTTP 403) |
+| Unresolvable IAM action for the request | Denied (HTTP 403) |
+
+The configured root credential pair (`FLOCI_AUTH_ROOT_ACCESS_KEY_ID` and `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY`) still bypasses all enforcement checks when both match the request, including strict mode.
+
+Pair strict enforcement with `FLOCI_AUTH_VALIDATE_SIGNATURES=true` so inbound API requests must carry a valid SigV4 signature. See [CTF hardening](#ctf-hardening) for the full operator workflow.
 
 ### Supported policy features
 
@@ -144,12 +166,67 @@ AWS_ACCESS_KEY_ID=$AKID AWS_SECRET_ACCESS_KEY=$SECRET \
   aws s3 ls
 ```
 
+## CTF hardening
+
+Use this profile when Floci backs a capture-the-flag or security exercise and you need participants to prove valid IAM credentials and SigV4 signatures rather than relying on permissive local defaults.
+
+### Required environment variables
+
+| Variable | Value | Purpose |
+|---|---|---|
+| `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED` | `true` | Evaluate IAM policies on every API call |
+| `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED` | `true` | Deny unregistered access keys and unknown IAM action mappings (no permissive fall-through) |
+| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `true` | Verify SigV4 request signatures using the caller's secret access key |
+| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | operator secret | Access key ID for challenge operator provisioning |
+| `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | operator secret | Secret access key paired with `FLOCI_AUTH_ROOT_ACCESS_KEY_ID`; both must match for the operator bypass |
+| `FLOCI_AUTH_PRESIGN_SECRET` | operator secret | HMAC secret for S3 pre-signed URLs; change from default `local-emulator-secret` |
+
+The repository `docker-compose.yml` enables IAM enforcement, strict mode, and SigV4 validation by default. Export operator credentials and a unique pre-sign secret on the host before starting Compose:
+
+```bash
+export FLOCI_AUTH_ROOT_ACCESS_KEY_ID="AKIA..."
+export FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY="..."
+export FLOCI_AUTH_PRESIGN_SECRET="$(openssl rand -hex 32)"
+export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
+docker compose up
+```
+
+### Operator workflow
+
+1. **Start Floci** with the CTF env vars set. Keep the root access key ID and secret known only to operators.
+2. **Provision challenge resources** using the root credentials (bypass IAM enforcement when the ID and secret both match):
+   ```bash
+   export AWS_ENDPOINT_URL=http://localhost:4566
+   export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
+   export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
+
+   aws iam create-user --user-name challenger
+   aws iam create-access-key --user-name challenger
+   # attach policies, create S3 buckets, Lambda functions, etc.
+   ```
+3. **Issue participant credentials** from IAM (`CreateAccessKey` output). Participants must sign every request with SigV4 using those keys.
+4. **Verify enforcement** by confirming an unprivileged or forged request returns HTTP 403:
+   ```bash
+   # wrong secret -> signature failure
+   AWS_ACCESS_KEY_ID=<participant-akid> AWS_SECRET_ACCESS_KEY=wrong \
+     aws s3 ls --endpoint-url http://localhost:4566
+   ```
+
+Under strict enforcement, the legacy `test`/`test` credential pair and other unregistered keys are rejected. Only IAM-registered identities with policies that allow the action (or the configured root pair) succeed.
+
+See also [Docker Compose](../configuration/docker-compose.md) and [Environment Variables](../configuration/environment-variables.md).
+
 ## Configuration
 
 | Variable | Default | Description |
 |---|---|---|
 | `FLOCI_SERVICES_IAM_ENABLED` | `true` | Enable or disable the service |
 | `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED` | `false` | Enforce IAM policies on all inbound requests |
+| `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED` | `false` | When `true` with enforcement enabled, deny unregistered keys and unknown action mappings |
+| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | _(none)_ | Operator root access key ID; bypasses enforcement when paired with `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` |
+| `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | _(none)_ | Operator root secret; must match `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` for the bypass |
+| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | When `true`, verify SigV4 signatures on inbound API requests |
 
 ## Examples
 

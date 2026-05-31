@@ -136,7 +136,9 @@ Background workers (Lambda event-source pollers, DynamoDB TTL sweeper, MSK readi
 
 ## Signature Validation
 
-By default Floci **does not** validate SigV4 signatures — only the access key ID matters for account resolution. The secret access key can be any non-empty string.
+By default Floci **does not** validate SigV4 signatures on inbound API requests. Only the access key ID is extracted from the `Authorization` header for account resolution and IAM enforcement. The secret access key is not verified on the main request path.
+
+`FLOCI_AUTH_VALIDATE_SIGNATURES=true` enables verification for **S3 pre-signed URLs** only (via `FLOCI_AUTH_PRESIGN_SECRET`). It does not validate SigV4 on every AWS API call.
 
 To enforce real signature validation:
 
@@ -157,4 +159,4 @@ Storage keys are namespaced per account at the persistence layer. When using `pe
 |---|---|---|
 | `FLOCI_DEFAULT_ACCOUNT_ID` | `000000000000` | Account ID used when the AKID is not exactly 12 digits |
 | `FLOCI_DEFAULT_REGION` | `us-east-1` | Region used when not derivable from the `Authorization` header |
-| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | Enforce SigV4 signature verification |
+| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | Verify S3 pre-signed URL signatures (not SigV4 on every API request) |

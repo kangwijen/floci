@@ -1,5 +1,6 @@
 package io.github.hectorvent.floci.services.rds.proxy;
 
+import io.github.hectorvent.floci.config.EmulatorConfig;
 import io.github.hectorvent.floci.services.iam.IamService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -31,10 +33,12 @@ public class RdsSigV4Validator {
             DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
 
     private final IamService iamService;
+    private final EmulatorConfig config;
 
     @Inject
-    public RdsSigV4Validator(IamService iamService) {
+    public RdsSigV4Validator(IamService iamService, EmulatorConfig config) {
         this.iamService = iamService;
+        this.config = config;
     }
 
     /**
@@ -101,7 +105,12 @@ public class RdsSigV4Validator {
             String service = credParts[3];
             String credentialScope = date + "/" + region + "/" + service + "/aws4_request";
 
-            String secretKey = iamService.findSecretKey(accessKeyId).orElse(accessKeyId);
+            Optional<String> secretOpt = resolveSecretKey(accessKeyId);
+            if (secretOpt.isEmpty()) {
+                LOG.debugv("RDS IAM token for unknown accessKey={0}", accessKeyId);
+                return false;
+            }
+            String secretKey = secretOpt.get();
 
             // Canonical query string: sorted pairs, excluding X-Amz-Signature
             String canonicalQueryString = Arrays.stream(rawPairs)
@@ -136,6 +145,17 @@ public class RdsSigV4Validator {
             LOG.debugv("RDS IAM token validation error: {0}", e.getMessage());
             return false;
         }
+    }
+
+    private Optional<String> resolveSecretKey(String accessKeyId) {
+        Optional<String> fromIam = iamService.findSecretKey(accessKeyId);
+        if (fromIam.isPresent()) {
+            return fromIam;
+        }
+        if (config.auth().rootAccessKeyId().filter(accessKeyId::equals).isPresent()) {
+            return config.auth().resolveRootSecretAccessKey();
+        }
+        return Optional.empty();
     }
 
     private static String rawParamName(String rawPair) {

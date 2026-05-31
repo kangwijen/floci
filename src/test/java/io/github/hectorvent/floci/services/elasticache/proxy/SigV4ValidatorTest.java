@@ -1,22 +1,34 @@
 package io.github.hectorvent.floci.services.elasticache.proxy;
 
+import io.github.hectorvent.floci.config.EmulatorConfig;
 import io.github.hectorvent.floci.services.iam.IamService;
 import io.github.hectorvent.floci.testutil.IamServiceTestHelper;
 import io.github.hectorvent.floci.testutil.SigV4TokenTestHelper;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SigV4ValidatorTest {
+
+    private static SigV4Validator validator(IamService iamService) {
+        EmulatorConfig config = mock(EmulatorConfig.class);
+        EmulatorConfig.AuthConfig authConfig = mock(EmulatorConfig.AuthConfig.class);
+        when(config.auth()).thenReturn(authConfig);
+        when(authConfig.rootAccessKeyId()).thenReturn(Optional.empty());
+        return new SigV4Validator(iamService, config);
+    }
 
     @Test
     void validateAcceptsTokenForMatchingReplicationGroup() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -34,7 +46,7 @@ class SigV4ValidatorTest {
     void validateRejectsTokenForDifferentReplicationGroup() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -51,7 +63,7 @@ class SigV4ValidatorTest {
     void validateRejectsTamperedSignature() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -69,7 +81,7 @@ class SigV4ValidatorTest {
     void validateAcceptsTokenWhenExpectedGroupIsNull() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -86,7 +98,7 @@ class SigV4ValidatorTest {
     void validateRejectsExpiredToken() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -103,7 +115,7 @@ class SigV4ValidatorTest {
     void validateRejectsTokenWithUnknownAccessKey() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -120,7 +132,7 @@ class SigV4ValidatorTest {
     void validateRejectsTokenForWrongUser() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -138,7 +150,7 @@ class SigV4ValidatorTest {
     void validateAcceptsTokenWhenExpectedUsernameIsNull() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String token = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -156,7 +168,7 @@ class SigV4ValidatorTest {
     void validateAcceptsTokenWithUrlEncodedUser() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         // Username with characters that require URL encoding exercises the
         // encoding path independently of the validator's decode logic
         String token = SigV4TokenTestHelper.createElastiCacheToken(
@@ -175,7 +187,7 @@ class SigV4ValidatorTest {
     void validateRejectsTokenMissingActionParameter() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",
@@ -193,7 +205,7 @@ class SigV4ValidatorTest {
     void validateRejectsTokenMissingSignatureParameter() throws Exception {
         IamService iamService = IamServiceTestHelper.iamServiceWithAccessKey("AKIDCACHE", "secret-cache");
 
-        SigV4Validator validator = new SigV4Validator(iamService);
+        SigV4Validator validator = validator(iamService);
         String validToken = SigV4TokenTestHelper.createElastiCacheToken(
                 "cache-cluster-01",
                 "default",

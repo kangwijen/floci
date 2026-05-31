@@ -175,19 +175,22 @@ class ContainerLauncherTest {
         verify(lifecycleManager).create(specCaptor.capture());
 
         List<String> env = specCaptor.getValue().env();
-        assertTrue(env.stream().anyMatch(e -> e.startsWith("AWS_ACCESS_KEY_ID=")),
-                "AWS_ACCESS_KEY_ID should be injected when awsConfigPath is absent");
-        assertTrue(env.stream().anyMatch(e -> e.startsWith("AWS_SECRET_ACCESS_KEY=")),
-                "AWS_SECRET_ACCESS_KEY should be injected when awsConfigPath is absent");
-        assertTrue(env.stream().anyMatch(e -> e.startsWith("AWS_SESSION_TOKEN=")),
-                "AWS_SESSION_TOKEN should be injected when awsConfigPath is absent");
+        if (System.getenv("AWS_ACCESS_KEY_ID") != null) {
+            assertTrue(env.stream().anyMatch(e -> e.startsWith("AWS_ACCESS_KEY_ID=")),
+                    "AWS_ACCESS_KEY_ID should be injected when set in host env");
+        }
+        if (System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
+            assertTrue(env.stream().anyMatch(e -> e.startsWith("AWS_SECRET_ACCESS_KEY=")),
+                    "AWS_SECRET_ACCESS_KEY should be injected when set in host env");
+        }
+        if (System.getenv("AWS_SESSION_TOKEN") != null) {
+            assertTrue(env.stream().anyMatch(e -> e.startsWith("AWS_SESSION_TOKEN=")),
+                    "AWS_SESSION_TOKEN should be injected when set in host env");
+        }
     }
 
     @Test
-    void launchFunction_fallsBackToTestCredentialsWhenEnvUnset() throws Exception {
-        // When System.getenv returns null for AWS vars, credentials should be test/test/test.
-        // Since we can't control System.getenv in unit tests, we verify the values are either
-        // from the environment or the "test" fallback — both are valid.
+    void launchFunction_omitsCredentialsWhenEnvUnset() throws Exception {
         Path codePath = Files.createDirectory(tempDir.resolve("creds-fallback"));
 
         LambdaFunction fn = new LambdaFunction();
@@ -202,18 +205,18 @@ class ContainerLauncherTest {
         verify(lifecycleManager).create(specCaptor.capture());
 
         List<String> env = specCaptor.getValue().env();
-        String accessKey = env.stream().filter(e -> e.startsWith("AWS_ACCESS_KEY_ID=")).findFirst().orElse("");
-        String secretKey = env.stream().filter(e -> e.startsWith("AWS_SECRET_ACCESS_KEY=")).findFirst().orElse("");
-        String sessionToken = env.stream().filter(e -> e.startsWith("AWS_SESSION_TOKEN=")).findFirst().orElse("");
-
-        // Value should be either the host env var or "test" fallback
-        String expectedAk = System.getenv("AWS_ACCESS_KEY_ID") != null ? System.getenv("AWS_ACCESS_KEY_ID") : "test";
-        String expectedSk = System.getenv("AWS_SECRET_ACCESS_KEY") != null ? System.getenv("AWS_SECRET_ACCESS_KEY") : "test";
-        String expectedSt = System.getenv("AWS_SESSION_TOKEN") != null ? System.getenv("AWS_SESSION_TOKEN") : "test";
-
-        assertEquals("AWS_ACCESS_KEY_ID=" + expectedAk, accessKey);
-        assertEquals("AWS_SECRET_ACCESS_KEY=" + expectedSk, secretKey);
-        assertEquals("AWS_SESSION_TOKEN=" + expectedSt, sessionToken);
+        if (System.getenv("AWS_ACCESS_KEY_ID") == null) {
+            assertTrue(env.stream().noneMatch(e -> e.startsWith("AWS_ACCESS_KEY_ID=")),
+                    "AWS_ACCESS_KEY_ID should not be injected when unset");
+        }
+        if (System.getenv("AWS_SECRET_ACCESS_KEY") == null) {
+            assertTrue(env.stream().noneMatch(e -> e.startsWith("AWS_SECRET_ACCESS_KEY=")),
+                    "AWS_SECRET_ACCESS_KEY should not be injected when unset");
+        }
+        if (System.getenv("AWS_SESSION_TOKEN") == null) {
+            assertTrue(env.stream().noneMatch(e -> e.startsWith("AWS_SESSION_TOKEN=")),
+                    "AWS_SESSION_TOKEN should not be injected when unset");
+        }
     }
 
     @Test

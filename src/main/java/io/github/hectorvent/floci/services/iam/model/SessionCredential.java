@@ -14,6 +14,8 @@ public class SessionCredential {
     private Instant expiration;
     /** Inline session policy passed to AssumeRole/GetFederationToken — further restricts role policies. */
     private String sessionPolicyDocument;
+    /** Secret access key returned with the session; used for SigV4 validation when enabled. */
+    private String secretAccessKey;
 
     public SessionCredential() {}
 
@@ -41,4 +43,7 @@ public class SessionCredential {
 
     public String getSessionPolicyDocument() { return sessionPolicyDocument; }
     public void setSessionPolicyDocument(String sessionPolicyDocument) { this.sessionPolicyDocument = sessionPolicyDocument; }
+
+    public String getSecretAccessKey() { return secretAccessKey; }
+    public void setSecretAccessKey(String secretAccessKey) { this.secretAccessKey = secretAccessKey; }
 }

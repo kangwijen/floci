@@ -110,6 +110,21 @@ class IamEnforcementFilterTest {
         assertTrue(entityString(r).contains("\"__type\":\"AccessDeniedException\""));
     }
 
+    @Test
+    void internalHealthPathMatchesRootHealth() {
+        assertTrue(IamEnforcementFilter.isInternalHealthOrInfoPath("health"));
+        assertTrue(IamEnforcementFilter.isInternalHealthOrInfoPath("/health"));
+    }
+
+    @Test
+    void internalHealthPathMatchesFlociAndLocalstackPrefixes() {
+        assertTrue(IamEnforcementFilter.isInternalHealthOrInfoPath("/_floci/health"));
+        assertTrue(IamEnforcementFilter.isInternalHealthOrInfoPath("/_floci/info"));
+        assertTrue(IamEnforcementFilter.isInternalHealthOrInfoPath("/_localstack/init"));
+        assertTrue(!IamEnforcementFilter.isInternalHealthOrInfoPath("/"));
+        assertTrue(!IamEnforcementFilter.isInternalHealthOrInfoPath("/my-bucket"));
+    }
+
     private static String entityString(Response r) {
         Object entity = r.getEntity();
         assertNotNull(entity, "response body should not be null");

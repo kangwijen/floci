@@ -161,6 +161,21 @@ steps:
     run: mvn test
 ```
 
+## CTF security profile
+
+The repository root `docker-compose.yml` enables a CTF hardening profile by default:
+
+| Variable | Compose value | Purpose |
+|---|---|---|
+| `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED` | `"true"` | Enforce IAM policies on API calls |
+| `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED` | `"true"` | Deny unregistered keys and unknown action mappings |
+| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `"true"` | Verify SigV4 request signatures |
+| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | `${FLOCI_AUTH_ROOT_ACCESS_KEY_ID}` | Operator access key ID (host passthrough) |
+| `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | `${FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY}` | Operator secret key paired with the root access key ID |
+| `FLOCI_AUTH_PRESIGN_SECRET` | `${FLOCI_AUTH_PRESIGN_SECRET}` | HMAC secret for S3 pre-signed URLs; must not stay at default |
+
+Export the root credential pair and a unique pre-sign secret on the host before `docker compose up`. The same values are typically mirrored into `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for operator CLI use. See [IAM CTF hardening](../services/iam.md#ctf-hardening) for the full operator workflow.
+
 ## Common Environment Variables
 
 The most frequently set variables when running Floci as a Docker image:
@@ -173,7 +188,11 @@ The most frequently set variables when running Floci as a Docker image:
 | `FLOCI_STORAGE_MODE` | `memory` | `memory`, `persistent`, `hybrid`, or `wal` |
 | `FLOCI_STORAGE_PERSISTENT_PATH` | `./data` | Directory for persistent storage |
 | `FLOCI_SERVICES_DOCKER_NETWORK` | _(none)_ | Docker network for spawned containers (Lambda, ElastiCache, RDS, OpenSearch, MSK) |
-| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | Verify AWS request signatures |
+| `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED` | `false` | Enforce IAM policies (enabled in repo `docker-compose.yml`) |
+| `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED` | `false` | Strict IAM enforcement; no permissive fall-through (enabled in repo `docker-compose.yml`) |
+| `FLOCI_AUTH_VALIDATE_SIGNATURES` | `false` | Verify SigV4 request signatures (enabled in repo `docker-compose.yml`) |
+| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | _(none)_ | Operator root access key ID for IAM bypass |
+| `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | _(none)_ | Operator root secret paired with the root access key ID |
 | `FLOCI_SERVICES_LAMBDA_EPHEMERAL` | `false` | Remove Lambda containers after each invocation |
 
 For the complete list of every `FLOCI_*` variable, see [Environment Variables Reference](./environment-variables.md).

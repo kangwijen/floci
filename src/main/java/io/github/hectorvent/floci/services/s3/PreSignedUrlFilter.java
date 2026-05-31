@@ -1,5 +1,6 @@
 package io.github.hectorvent.floci.services.s3;
 
+import io.github.hectorvent.floci.config.EmulatorConfig;
 import io.github.hectorvent.floci.core.common.XmlBuilder;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
@@ -12,10 +13,12 @@ import jakarta.ws.rs.ext.Provider;
 public class PreSignedUrlFilter implements ContainerRequestFilter {
 
     private final PreSignedUrlGenerator presignGenerator;
+    private final EmulatorConfig config;
 
     @Inject
-    public PreSignedUrlFilter(PreSignedUrlGenerator presignGenerator) {
+    public PreSignedUrlFilter(PreSignedUrlGenerator presignGenerator, EmulatorConfig config) {
         this.presignGenerator = presignGenerator;
+        this.config = config;
     }
 
     @Override
@@ -25,6 +28,12 @@ public class PreSignedUrlFilter implements ContainerRequestFilter {
         // Only process if this is a pre-signed URL request
         String algorithm = queryParams.getFirst("X-Amz-Algorithm");
         if (algorithm == null) {
+            return;
+        }
+
+        if (config.services().iam().strictEnforcementEnabled() && !presignGenerator.shouldValidateSignatures()) {
+            requestContext.abortWith(errorResponse(403, "AccessDenied",
+                    "Pre-signed URLs require FLOCI_AUTH_VALIDATE_SIGNATURES when strict IAM enforcement is enabled."));
             return;
         }
 

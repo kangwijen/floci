@@ -1,0 +1,251 @@
+package io.github.hectorvent.floci.core.common;
+
+import jakarta.ws.rs.core.MultivaluedMap;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Validates inbound AWS SigV4 {@code Authorization} header signatures for REST and
+ * Query-protocol HTTP requests.
+ */
+public final class SigV4RequestValidator {
+
+    private static final Pattern AUTH_HEADER_PATTERN = Pattern.compile(
+            "^AWS4-HMAC-SHA256 Credential=([^,]+), SignedHeaders=([^,]+), Signature=([0-9a-f]+)$");
+    private static final DateTimeFormatter DATETIME_FMT =
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
+    private static final String EMPTY_PAYLOAD_HASH =
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    private static final long MAX_SKEW_SECONDS = 15 * 60;
+
+    private SigV4RequestValidator() {
+    }
+
+    public enum Result {
+        VALID,
+        INVALID_SIGNATURE,
+        INVALID_AUTHORIZATION,
+        EXPIRED
+    }
+
+    public static Result validate(String method,
+                                  String rawPath,
+                                  String rawQuery,
+                                  MultivaluedMap<String, String> headers,
+                                  String authorizationHeader,
+                                  String secretKey) {
+        try {
+            Matcher auth = AUTH_HEADER_PATTERN.matcher(authorizationHeader.trim());
+            if (!auth.matches()) {
+                return Result.INVALID_AUTHORIZATION;
+            }
+
+            String credential = auth.group(1).trim();
+            String signedHeadersList = auth.group(2).trim().toLowerCase(Locale.ROOT);
+            String providedSignature = auth.group(3).trim();
+
+            String[] credParts = credential.split("/");
+            if (credParts.length < 5) {
+                return Result.INVALID_AUTHORIZATION;
+            }
+            String date = credParts[1];
+            String region = credParts[2];
+            String service = credParts[3];
+            String credentialScope = date + "/" + region + "/" + service + "/aws4_request";
+
+            String amzDate = headerValue(headers, "x-amz-date");
+            if (amzDate == null) {
+                return Result.INVALID_AUTHORIZATION;
+            }
+            if (isExpired(amzDate)) {
+                return Result.EXPIRED;
+            }
+
+            String canonicalRequest = buildCanonicalRequest(
+                    method,
+                    rawPath,
+                    rawQuery,
+                    headers,
+                    signedHeadersList);
+
+            String stringToSign = "AWS4-HMAC-SHA256\n"
+                    + amzDate + "\n"
+                    + credentialScope + "\n"
+                    + sha256Hex(canonicalRequest);
+
+            byte[] signingKey = deriveSigningKey(secretKey, date, region, service);
+            String expectedSignature = hexEncode(hmacSha256(signingKey, stringToSign));
+
+            if (MessageDigest.isEqual(
+                    expectedSignature.getBytes(StandardCharsets.UTF_8),
+                    providedSignature.getBytes(StandardCharsets.UTF_8))) {
+                return Result.VALID;
+            }
+            return Result.INVALID_SIGNATURE;
+        } catch (Exception e) {
+            return Result.INVALID_SIGNATURE;
+        }
+    }
+
+    private static boolean isExpired(String amzDate) {
+        try {
+            Instant requestTime = Instant.from(DATETIME_FMT.parse(amzDate));
+            Instant now = Instant.now();
+            return requestTime.isBefore(now.minusSeconds(MAX_SKEW_SECONDS))
+                    || requestTime.isAfter(now.plusSeconds(MAX_SKEW_SECONDS));
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private static String buildCanonicalRequest(String method,
+                                                String rawPath,
+                                                String rawQuery,
+                                                MultivaluedMap<String, String> headers,
+                                                String signedHeadersList) throws Exception {
+        String canonicalUri = canonicalUri(rawPath);
+        String canonicalQueryString = canonicalQueryString(rawQuery);
+        String[] signedHeaderNames = signedHeadersList.split(";");
+        List<String> canonicalHeaderLines = new ArrayList<>();
+        for (String name : signedHeaderNames) {
+            String value = headerValue(headers, name);
+            if (value == null) {
+                throw new IllegalStateException("Missing signed header: " + name);
+            }
+            canonicalHeaderLines.add(name + ":" + trimHeaderValue(value));
+        }
+        canonicalHeaderLines.sort(Comparator.naturalOrder());
+        String canonicalHeaders = String.join("\n", canonicalHeaderLines) + "\n";
+
+        String payloadHash = headerValue(headers, "x-amz-content-sha256");
+        if (payloadHash == null || payloadHash.isBlank()) {
+            payloadHash = EMPTY_PAYLOAD_HASH;
+        }
+
+        return method.toUpperCase(Locale.ROOT) + "\n"
+                + canonicalUri + "\n"
+                + canonicalQueryString + "\n"
+                + canonicalHeaders + "\n"
+                + signedHeadersList + "\n"
+                + payloadHash;
+    }
+
+    private static String headerValue(MultivaluedMap<String, String> headers,
+                                      String lowercaseName) {
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if (entry.getKey() != null
+                    && entry.getKey().toLowerCase(Locale.ROOT).equals(lowercaseName)) {
+                List<String> values = entry.getValue();
+                if (values == null || values.isEmpty()) {
+                    return null;
+                }
+                return String.join(",", values);
+            }
+        }
+        return null;
+    }
+
+    private static String trimHeaderValue(String value) {
+        String trimmed = value.trim();
+        return trimmed.replaceAll("\\s+", " ");
+    }
+
+    static String canonicalUri(String rawPath) {
+        if (rawPath == null || rawPath.isEmpty()) {
+            return "/";
+        }
+        if (!rawPath.startsWith("/")) {
+            rawPath = "/" + rawPath;
+        }
+        if ("/".equals(rawPath)) {
+            return "/";
+        }
+        String[] segments = rawPath.split("/", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i < segments.length; i++) {
+            sb.append("/").append(awsUriEncode(segments[i], true));
+        }
+        return sb.length() == 0 ? "/" : sb.toString();
+    }
+
+    static String canonicalQueryString(String rawQuery) {
+        if (rawQuery == null || rawQuery.isBlank()) {
+            return "";
+        }
+        List<String> pairs = new ArrayList<>();
+        for (String part : rawQuery.split("&")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            int eq = part.indexOf('=');
+            String rawName = eq >= 0 ? part.substring(0, eq) : part;
+            String rawValue = eq >= 0 ? part.substring(eq + 1) : "";
+            if ("X-Amz-Signature".equals(rawName) || "X-Amz-Signature".equals(urlDecode(rawName))) {
+                continue;
+            }
+            String name = awsUriEncode(urlDecode(rawName), true);
+            String value = awsUriEncode(urlDecode(rawValue), true);
+            pairs.add(name + "=" + value);
+        }
+        pairs.sort(Comparator.naturalOrder());
+        return String.join("&", pairs);
+    }
+
+    private static String urlDecode(String value) {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8);
+    }
+
+    static String awsUriEncode(String value, boolean encodeSlash) {
+        String encoded = URLEncoder.encode(value, StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .replace("*", "%2A")
+                .replace("%7E", "~");
+        if (!encodeSlash) {
+            encoded = encoded.replace("%2F", "/");
+        }
+        return encoded;
+    }
+
+    private static byte[] deriveSigningKey(String secretKey, String date, String region,
+                                           String service) throws Exception {
+        byte[] kSecret = ("AWS4" + secretKey).getBytes(StandardCharsets.UTF_8);
+        byte[] kDate = hmacSha256(kSecret, date);
+        byte[] kRegion = hmacSha256(kDate, region);
+        byte[] kService = hmacSha256(kRegion, service);
+        return hmacSha256(kService, "aws4_request");
+    }
+
+    private static byte[] hmacSha256(byte[] key, String data) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(key, "HmacSHA256"));
+        return mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String sha256Hex(String input) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        return hexEncode(digest.digest(input.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static String hexEncode(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+}

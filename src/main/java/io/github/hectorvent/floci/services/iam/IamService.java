@@ -805,7 +805,13 @@ public class IamService {
     // =========================================================================
 
     public Optional<String> findSecretKey(String accessKeyId) {
-        return accessKeys.get(accessKeyId).map(AccessKey::getSecretAccessKey);
+        Optional<String> userSecret = accessKeys.get(accessKeyId).map(AccessKey::getSecretAccessKey);
+        if (userSecret.isPresent()) {
+            return userSecret;
+        }
+        return sessions.get(accessKeyId)
+                .map(SessionCredential::getSecretAccessKey)
+                .filter(s -> s != null && !s.isBlank());
     }
 
     // =========================================================================
@@ -816,7 +822,7 @@ public class IamService {
      * Stores an assumed-role session so the enforcement filter can resolve its policies.
      */
     public void registerSession(String sessionAccessKeyId, String roleArn, java.time.Instant expiration) {
-        sessions.put(sessionAccessKeyId, new SessionCredential(sessionAccessKeyId, roleArn, expiration));
+        registerSession(sessionAccessKeyId, roleArn, expiration, null, null);
     }
 
     /**
@@ -824,8 +830,18 @@ public class IamService {
      */
     public void registerSession(String sessionAccessKeyId, String roleArn, java.time.Instant expiration,
                                 String sessionPolicyDocument) {
-        sessions.put(sessionAccessKeyId,
-                new SessionCredential(sessionAccessKeyId, roleArn, expiration, sessionPolicyDocument));
+        registerSession(sessionAccessKeyId, roleArn, expiration, sessionPolicyDocument, null);
+    }
+
+    /**
+     * Stores a session including its secret access key for SigV4 validation.
+     */
+    public void registerSession(String sessionAccessKeyId, String roleArn, java.time.Instant expiration,
+                                String sessionPolicyDocument, String secretAccessKey) {
+        SessionCredential session = new SessionCredential(
+                sessionAccessKeyId, roleArn, expiration, sessionPolicyDocument);
+        session.setSecretAccessKey(secretAccessKey);
+        sessions.put(sessionAccessKeyId, session);
     }
 
     /**
