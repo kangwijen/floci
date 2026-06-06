@@ -29,7 +29,7 @@ class SigV4RequestValidatorTest {
     void validate_acceptsSignedIamQueryPost() throws Exception {
         String accessKeyId = "AKIAIOSFODNN7EXAMPLE";
         String secretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-        Instant now = Instant.parse("2026-05-31T12:00:00Z");
+        Instant now = Instant.now();
         String host = "localhost:4566";
         String path = "/";
         String body = "Action=ListUsers&Version=2010-05-08";
@@ -69,7 +69,7 @@ class SigV4RequestValidatorTest {
     void validate_rejectsWrongSecret() throws Exception {
         String accessKeyId = "AKIAIOSFODNN7EXAMPLE";
         String secretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-        Instant now = Instant.parse("2026-05-31T12:00:00Z");
+        Instant now = Instant.now();
         String host = "localhost:4566";
 
         SignedRequest signed = signHeaderAuth(
@@ -112,7 +112,7 @@ class SigV4RequestValidatorTest {
     void validate_acceptsStandardV4WithoutContentSha256Header() throws Exception {
         String accessKeyId = "AKIAIOSFODNN7EXAMPLE";
         String secretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-        Instant now = Instant.parse("2026-05-31T12:00:00Z");
+        Instant now = Instant.now();
         String host = "127.0.0.1:4566";
         String path = "/";
         String body = "{\"Name\":\"/nimbus/challenge/escalation\"}";
@@ -154,7 +154,7 @@ class SigV4RequestValidatorTest {
     void validate_rejectsWrongBodyWhenNoContentSha256Header() throws Exception {
         String accessKeyId = "AKIAIOSFODNN7EXAMPLE";
         String secretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-        Instant now = Instant.parse("2026-05-31T12:00:00Z");
+        Instant now = Instant.now();
         String host = "127.0.0.1:4566";
         String path = "/";
         String body = "{\"Name\":\"/nimbus/challenge/escalation\"}";
