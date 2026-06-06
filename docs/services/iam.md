@@ -225,7 +225,7 @@ Use this profile when Floci backs a capture-the-flag or security exercise and yo
 | `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED` | `true` | Evaluate IAM policies on every API call |
 | `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED` | `true` | Deny unregistered access keys and unknown IAM action mappings (no permissive fall-through) |
 | `FLOCI_AUTH_VALIDATE_SIGNATURES` | `true` | Verify SigV4 request signatures using the caller's secret access key |
-| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | operator secret | Access key ID for challenge operator provisioning |
+| `FLOCI_AUTH_ROOT_ACCESS_KEY_ID` | operator secret | Access key ID for operator provisioning |
 | `FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY` | operator secret | Secret access key paired with `FLOCI_AUTH_ROOT_ACCESS_KEY_ID`; both must match for the operator bypass |
 | `FLOCI_AUTH_PRESIGN_SECRET` | operator secret | HMAC secret for S3 pre-signed URLs; change from default `local-emulator-secret` |
 
@@ -243,14 +243,14 @@ docker compose up
 ### Operator workflow
 
 1. **Start Floci** with the CTF env vars set. Keep the root access key ID and secret known only to operators.
-2. **Provision challenge resources** using the root credentials (bypass IAM enforcement when the ID and secret both match):
+2. **Provision resources** using the root credentials (bypass IAM enforcement when the ID and secret both match):
    ```bash
    export AWS_ENDPOINT_URL=http://localhost:4566
    export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
    export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
 
-   aws iam create-user --user-name challenger
-   aws iam create-access-key --user-name challenger
+   aws iam create-user --user-name player1
+   aws iam create-access-key --user-name player1
    # attach policies, create S3 buckets, Lambda functions, etc.
    ```
 3. **Issue participant credentials** from IAM (`CreateAccessKey` output). Participants must sign every request with SigV4 using those keys.

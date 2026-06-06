@@ -19,7 +19,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
- * F9: new default policy version applies on the next HTTP call (no stale cache).
+ * New default policy version applies on the next HTTP call (no stale cache).
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

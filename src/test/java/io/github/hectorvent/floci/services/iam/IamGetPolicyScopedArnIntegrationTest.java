@@ -13,7 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
 /**
- * F7: {@code iam:GetPolicy} scoped to one managed policy ARN.
+ * {@code iam:GetPolicy} scoped to one managed policy ARN.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

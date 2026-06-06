@@ -18,7 +18,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * F10: KMS-wrapped {@code SecretBinary} compatible with {@code aws kms decrypt}.
+ * KMS-wrapped {@code SecretBinary} compatible with {@code aws kms decrypt}.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

@@ -19,9 +19,9 @@
 
 # Floci CTF
 
-A security-hardened fork of [Floci](https://github.com/floci-io/floci) (currently merged with upstream **1.5.22**) for capture-the-flag and security exercises. Same local AWS emulator on port **4566**, with IAM enforcement, strict policy mode, SigV4 validation, and CTF-specific controls so participants cannot rely on permissive `test`/`test` credentials, unsigned requests, or internal introspection routes.
+A security-hardened fork of [Floci](https://github.com/floci-io/floci) (upstream **1.5.22**, Quarkus **3.36.0**) for capture-the-flag and security exercises. Same local AWS emulator on port **4566**, with IAM enforcement, strict policy mode, SigV4 validation, and CTF-specific controls so participants cannot rely on permissive `test`/`test` credentials, unsigned requests, or internal introspection routes.
 
-For service coverage, architecture, SDK examples, and general configuration, use the [upstream Floci README](https://github.com/floci-io/floci/blob/main/README.md) and [docs](https://floci.io/floci/). For operator setup, challenge images, and `floci:local` behavior, see [FLOCI.md](./FLOCI.md).
+For service coverage, architecture, SDK examples, and general configuration, use the [upstream Floci README](https://github.com/floci-io/floci/blob/main/README.md) and [docs](https://floci.io/floci/). For operators, agents, and `floci:local` behavior, see [AGENT.md](./AGENT.md).
 
 ## What changed
 
@@ -37,15 +37,16 @@ For service coverage, architecture, SDK examples, and general configuration, use
 | `sts:GetCallerIdentity` / `GetSessionToken` | Evaluated like any action | Policy-exempt (AWS parity): no Allow required; SigV4 and registered keys still apply |
 | `sts:GetCallerIdentity` response | Often returns account `:root` | Returns the **calling principal** (IAM user, assumed role, federated user, operator root, or 12-digit account id) |
 | Role trust `sts:ExternalId` | Not enforced | Trust policy conditions evaluated on `AssumeRole` |
-| Identity policy `Resource` matching | Most requests use `*` | `ResourceArnBuilder` resolves per-service ARNs for identity policies |
 | Resource-based policies | Not enforced on HTTP | S3/Lambda/SQS/SNS/KMS/Secrets resource policies in `IamEnforcementFilter`; presigned S3 evaluates bucket policy after HMAC; `NotPrincipal` supported; account `:root` in resource policies does **not** directly allow IAM users (identity policy still required) |
-| Lab builder IAM (F1-F10) | Partial / ad hoc | S3 versioning IAM, scoped KMS/SQS/SNS/SSM/CFN/IAM/Secrets actions on HTTP `:4566` with integration tests; see [FLOCI.md](./FLOCI.md#lab-builder-capabilities-p0p1-http-sigv4-on-4566) |
+| Scoped IAM `Resource` ARNs | Most requests use `*` | `ResourceArnBuilder` maps per-service ARNs for S3, IAM, DynamoDB, KMS, SQS, SNS, SSM, STS, and more on HTTP `:4566` |
 | Health `services` map | Lists all services as `running` or `available` | Only **enabled** services appear as `running`; disabled services omitted |
 | Internal introspection routes | `/_floci/*`, `/_localstack/*`, `/health` open | Default `FLOCI_CTF_HIDE_INTERNAL_ENDPOINTS=true` hides prefixed routes; `all` also hides `/health` |
 | Container env (Lambda, ECS, CodeBuild) | Function/task/build env can set `AWS_*` | `ContainerEnvHardening` blocks credential keys in user-supplied env; only `OperatorCredentialEnv` injects host operator `AWS_*` (Lambda: applied last) |
 | EKS kubectl token webhook | Any `k8s-aws-v1.*` accepted as cluster-admin | Hidden under `/_floci/*` by default; with IAM enforcement on, requires plausible presigned STS `GetCallerIdentity` URL (`EksTokenAuthenticator`) |
 
-**Fork-only code (high level):** `IamEnforcementFilter`, `SigV4ValidationFilter`, `ResourcePolicyResolver`, `ResourceArnBuilder`, `AssumeRoleTrustPolicyEvaluator`, `CtfInternalEndpointFilter`, `ContainerEnvHardening`, `OperatorCredentialEnv`, `EksTokenAuthenticator`. Map: [AGENTS.md](./AGENTS.md#ctf-implementation-map).
+**Fork-only code (high level):** `IamEnforcementFilter`, `SigV4ValidationFilter`, `PolicyPrincipalMatcher`, `ResourcePolicyResolver`, `ResourceArnBuilder`, `AssumeRoleTrustPolicyEvaluator`, `CtfInternalEndpointFilter`, `ContainerEnvHardening`, `OperatorCredentialEnv`, `EksTokenAuthenticator`, `SecretsManagerKmsSupport`. Map: [AGENT.md](./AGENT.md#ctf-implementation-map).
+
+After each upstream merge, re-verify CTF hardening on conflict-prone files (`SnsService`, `EcsContainerManager`, `docker-compose.yml`, IAM filters). See [AGENT.md](./AGENT.md#upstream-sync).
 
 ## Quick start (operators)
 
@@ -61,7 +62,7 @@ export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
 docker compose up
 ```
 
-All AWS services listen on `http://localhost:4566`. Use the root credentials only for challenge setup. Issue participant credentials via IAM (`CreateAccessKey`) and scoped policies.
+All AWS services listen on `http://localhost:4566`. Use the root credentials only for operator provisioning. Issue participant credentials via IAM (`CreateAccessKey`) and scoped policies.
 
 ## Required environment variables
 
@@ -88,8 +89,8 @@ export AWS_ENDPOINT_URL=http://localhost:4566
 export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
 
-aws iam create-user --user-name challenger
-aws iam create-access-key --user-name challenger
+aws iam create-user --user-name player1
+aws iam create-access-key --user-name player1
 # attach policies, create buckets, Lambda functions, etc.
 ```
 
@@ -106,16 +107,12 @@ curl -s http://localhost:4566/health | jq .services
 ```bash
 # As participant (briefing AKIA only — not operator root)
 aws sts get-caller-identity --endpoint-url "$AWS_ENDPOINT_URL"
-# Expect Arn like arn:aws:iam::ACCOUNT:user/challenger — not ...:root
+# Expect Arn like arn:aws:iam::ACCOUNT:user/player1 — not ...:root
 ```
 
 Under strict mode, `test`/`test` and other unregistered keys are rejected. Only IAM identities allowed by policy (or the configured root pair) succeed.
 
-**STS notes for challenge authors**
-
-- Participants do **not** need `sts:GetCallerIdentity` or `sts:GetSessionToken` in their IAM policies (same as AWS).
-- Operator `FLOCI_AUTH_ROOT_*` and 12-digit account-style access keys still resolve to `arn:aws:iam::ACCOUNT:root`.
-- Set `FLOCI_DEFAULT_ACCOUNT_ID` (or `floci.default-account-id`) when labs use a non-default account id (e.g. `222222222222`); IAM user ARNs and `GetCallerIdentity` use that account.
+**STS notes:** Participants do **not** need `sts:GetCallerIdentity` or `sts:GetSessionToken` in IAM policies (same as AWS). Operator `FLOCI_AUTH_ROOT_*` resolves to `arn:aws:iam::ACCOUNT:root`. Set `FLOCI_DEFAULT_ACCOUNT_ID` when using a non-default account id in ARNs.
 
 ## Client tooling notes
 
@@ -144,23 +141,29 @@ client = boto3.client(
 ./mvnw test -Dtest=HealthServicesReportingIntegrationTest,CtfHideInternalEndpointsIntegrationTest,ContainerEnvHardeningTest,EksTokenAuthenticatorTest,IamEnforcementIntegrationTest,StsAssumeRoleTrustIntegrationTest,SigV4RequestValidatorTest,PreSignedUrlIntegrationTest
 ```
 
-**Lab builder capabilities (F1-F10, HTTP IAM on `:4566`):**
-
-```bash
-./mvnw test -Dtest=S3ObjectVersioningIamIntegrationTest,KmsDecryptScopedKeyIntegrationTest,SnsSubscribeReceiveIamIntegrationTest,SqsReceiveMessageScopedQueueIntegrationTest,SsmGetParameterScopedArnIntegrationTest,CloudFormationDescribeStacksScopedIntegrationTest,IamGetPolicyScopedArnIntegrationTest,IamStrictUnmappedActionIntegrationTest,CreatePolicyVersionGrantsSecretReadIntegrationTest,SecretsManagerKmsEnvelopeIntegrationTest,IamActionRegistryTest,ResourceArnBuilderTest
-```
-
 On Windows with Docker Desktop, set `$env:DOCKER_HOST = "npipe:////./pipe/docker_engine"` before tests that spawn containers.
 
 ## Documentation in this repo
 
 | Topic | Location |
 |---|---|
-| Operator guide (`floci:local`, players vs operator, F1-F10 matrix) | [FLOCI.md](./FLOCI.md) |
+| Operators, agents, `floci:local` | [AGENT.md](./AGENT.md) |
+| Fork delta summary (this file) | [README.md](./README.md) |
 | CTF hardening and IAM behaviour | [docs/services/iam.md](./docs/services/iam.md#ctf-hardening) |
-| Agent / implementation map | [AGENTS.md](./AGENTS.md) |
 | Compose CTF profile | [docs/configuration/docker-compose.md](./docs/configuration/docker-compose.md#ctf-security-profile) |
 | All `FLOCI_*` variables | [docs/configuration/environment-variables.md](./docs/configuration/environment-variables.md) |
+
+## Upstream sync
+
+This fork periodically merges [floci-io/floci](https://github.com/floci-io/floci) `main`. Preserve CTF behavior on overlapping files; do not revert IAM enforcement, strict mode, SigV4 validation, `ContainerEnvHardening`, or the SNS default-topic-policy gate when IAM enforcement is on.
+
+**High-risk merge files:** `SnsService.java` (must keep `iamEnforcementEnabled` gate), `EcsContainerManager.java` (must keep `ContainerEnvHardening` on env), `IamEnforcementFilter.java`, `PolicyPrincipalMatcher.java`, `docker-compose.yml`, `docker/Dockerfile`.
+
+**Post-merge regression:**
+
+```bash
+./mvnw test -Dtest=SigV4RequestValidatorTest,IamEnforcementIntegrationTest,StsAssumeRoleTrustIntegrationTest,ContainerEnvHardeningTest
+```
 
 ## Upstream
 

@@ -13,7 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
 /**
- * F3: {@code sns:Subscribe} scoped to one topic ARN; fan-out to SQS without player {@code sns:Publish}.
+ * {@code sns:Subscribe} scoped to one topic ARN; fan-out to SQS without participant {@code sns:Publish}.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

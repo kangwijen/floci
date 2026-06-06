@@ -395,8 +395,8 @@ class IamServiceTest {
 
     @Test
     void resolveCallerIdentityForIamUserAccessKey() {
-        iamService.createUser("nimbus-analyst", "/");
-        AccessKey key = iamService.createAccessKey("nimbus-analyst");
+        iamService.createUser("test-user", "/");
+        AccessKey key = iamService.createAccessKey("test-user");
 
         CallerIdentity identity = iamService.resolveCallerIdentity(
                         key.getAccessKeyId(), "000000000000", Optional.empty())
@@ -404,7 +404,7 @@ class IamServiceTest {
 
         assertEquals("000000000000", identity.account());
         assertTrue(identity.userId().startsWith("AIDA"));
-        assertEquals("arn:aws:iam::000000000000:user/nimbus-analyst", identity.arn());
+        assertEquals("arn:aws:iam::000000000000:user/test-user", identity.arn());
     }
 
     @Test

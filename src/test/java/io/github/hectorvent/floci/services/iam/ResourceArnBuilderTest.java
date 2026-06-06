@@ -35,9 +35,9 @@ class ResourceArnBuilderTest {
 
     @Test
     void ssmGetParameterBuildsExactArn() {
-        ContainerRequestContext ctx = jsonBodyCtx("{\"Name\":\"/nimbus/challenge/escalation\"}");
+        ContainerRequestContext ctx = jsonBodyCtx("{\"Name\":\"/app/test/parameter\"}");
         String arn = builder.build("ssm", ctx, REGION, ACCOUNT);
-        assertEquals("arn:aws:ssm:us-east-1:222222222222:parameter/nimbus/challenge/escalation", arn);
+        assertEquals("arn:aws:ssm:us-east-1:222222222222:parameter/app/test/parameter", arn);
     }
 
     @Test
@@ -88,7 +88,7 @@ class ResourceArnBuilderTest {
 
     @Test
     void stsAssumeRoleExtractsRoleArnFromFormBody() {
-        String roleArn = "arn:aws:iam::222222222222:role/nimbus-flag-reader";
+        String roleArn = "arn:aws:iam::222222222222:role/app-reader-role";
         ContainerRequestContext ctx = formBodyCtx(
                 "Action=AssumeRole&RoleArn=" + roleArn + "&RoleSessionName=s");
         String arn = builder.build("sts", ctx, REGION, ACCOUNT);
@@ -203,9 +203,9 @@ class ResourceArnBuilderTest {
 
     @Test
     void kmsAliasNameBuildsAliasArn() {
-        ContainerRequestContext ctx = jsonBodyCtx("{\"AliasName\":\"alias/nimbus\"}");
+        ContainerRequestContext ctx = jsonBodyCtx("{\"AliasName\":\"alias/test-key\"}");
         String arn = builder.build("kms", ctx, REGION, ACCOUNT);
-        assertEquals("arn:aws:kms:us-east-1:222222222222:alias/nimbus", arn);
+        assertEquals("arn:aws:kms:us-east-1:222222222222:alias/test-key", arn);
     }
 
     @Test
@@ -285,9 +285,9 @@ class ResourceArnBuilderTest {
 
     @Test
     void ecrDescribeRepositoriesBuildsRepoArn() {
-        ContainerRequestContext ctx = jsonBodyCtx("{\"repositoryName\":\"nimbus/app\"}");
+        ContainerRequestContext ctx = jsonBodyCtx("{\"repositoryName\":\"test/app\"}");
         String arn = builder.build("ecr", ctx, REGION, ACCOUNT);
-        assertEquals("arn:aws:ecr:us-east-1:222222222222:repository/nimbus/app", arn);
+        assertEquals("arn:aws:ecr:us-east-1:222222222222:repository/test/app", arn);
     }
 
     @Test

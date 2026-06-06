@@ -1,31 +1,212 @@
-Guidance for AI coding agents working in the Floci repository.
+# Agent guide: floci-ctf
 
-This file defines repository-specific operating rules for autonomous or semi-autonomous coding agents. Follow these instructions unless a maintainer explicitly tells you otherwise.
+Guidance for AI agents and operators in this repository. **floci-ctf** is a security-hardened fork of [Floci](https://github.com/floci-io/floci) for CTF and security exercises. It is not stock upstream `floci/floci:latest`.
+
+Human-readable fork summary: [README.md](./README.md). IAM detail: [docs/services/iam.md](./docs/services/iam.md#ctf-hardening).
 
 ---
 
-## Project Overview
+## CTF fork overview
 
-Floci is a Java-based local AWS emulator built on Quarkus.
+| Item | Value |
+|---|---|
+| Language | Java 25 |
+| Framework | Quarkus 3.36.0 |
+| Upstream release | 1.5.22 |
+| Port | 4566 (HTTP API) |
+| Config prefix | `floci.*` / `FLOCI_*` |
+| Image tag (local) | `floci:local` |
 
-Its goal is full AWS SDK and AWS CLI compatibility through real AWS wire protocols, not convenience APIs or simplified abstractions.
+**First principles (override upstream defaults when they conflict):**
 
-Floci acts as an open-source alternative to LocalStack Community.
+1. Preserve CTF hardening on upstream merges: IAM enforcement, strict mode, SigV4 validation, no baked-in `test`/`test`.
+2. Match AWS semantics where Floci can model them (auth, presign, STS trust, resource policies).
+3. Keep diffs narrow; reuse `AwsException`, `StorageFactory`, protocol controllers.
+4. Ship docs and tests with behavior changes (`README.md`, this file, `docs/services/iam.md` when IAM changes).
+5. Prioritize core CTF surface: IAM, STS, S3, SQS, SNS, DynamoDB, Lambda, KMS, Secrets Manager.
+
+**Fork-only HTTP auth (`core.common`):** `IamEnforcementFilter`, `SigV4ValidationFilter`, `SigV4RequestValidator`, `SecurityBypassPaths`, `CtfInternalEndpointFilter`, `CtfHideInternalEndpointsMode`, `ContainerEnvHardening`, `OperatorCredentialEnv`.
+
+**Related fork deltas:** `PreSignedUrlFilter`, `ResourcePolicyResolver`, `PolicyPrincipalMatcher`, `ResourceArnBuilder`, `AssumeRoleTrustPolicyEvaluator`, `StsQueryHandler`, `SecretsManagerKmsSupport`, `EksTokenAuthenticator`.
+
+---
+
+## Using `floci:local` (operators)
+
+Build from this repo (not upstream `floci/floci:latest`):
+
+```bash
+docker build -f docker/Dockerfile -t floci:local .
+```
+
+Set operator env on the **host**, then start Compose:
+
+```bash
+export FLOCI_AUTH_ROOT_ACCESS_KEY_ID="AKIA..."
+export FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY="..."
+export FLOCI_AUTH_PRESIGN_SECRET="$(openssl rand -hex 32)"
+export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
+docker compose up -d
+```
+
+Compose enables (do not turn off for CTF): `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED`, `FLOCI_SERVICES_IAM_STRICT_ENFORCEMENT_ENABLED`, `FLOCI_AUTH_VALIDATE_SIGNATURES`, `FLOCI_CTF_HIDE_INTERNAL_ENDPOINTS` (use `all` to hide `/health` from players).
+
+### Operator vs participant
+
+| Role | Credentials | Behavior |
+|------|-------------|----------|
+| **Operator** | `FLOCI_AUTH_ROOT_*` | Bypasses IAM enforcement for provisioning; must SigV4; never give to players |
+| **Participant** | IAM `create-access-key` | Subject to IAM + SigV4; `test`/`test` and unregistered keys fail |
+
+```bash
+export AWS_ENDPOINT_URL=http://localhost:4566
+# Operator provisioning
+aws iam create-user --user-name player1
+aws iam create-access-key --user-name player1
+aws sts get-caller-identity   # expect arn:aws:iam::ACCOUNT:user/player1, not :root
+```
+
+### Fork vs upstream (summary)
+
+| Topic | Upstream | This fork |
+|-------|----------|-----------|
+| Default creds | `test`/`test` baked in | None in `docker/Dockerfile` |
+| IAM enforcement | Off by default | On in `docker-compose.yml` |
+| SigV4 | Off by default | On with Compose profile |
+| Strict mode | N/A | Denies missing auth, unmapped actions, bad presign |
+| Internal routes | Open | `FLOCI_CTF_HIDE_INTERNAL_ENDPOINTS` returns 404 on `/_floci/*`, `/_localstack/*` |
+| `GetCallerIdentity` | Often account `:root` | Calling principal ARN for IAM users |
+| Container env | User can set `AWS_*` | `ContainerEnvHardening` strips credential keys |
+
+### Health and internal endpoints
+
+| `FLOCI_CTF_HIDE_INTERNAL_ENDPOINTS` | `/health` | `/_floci/*`, `/_localstack/*` |
+|-------------------------------------|-----------|-------------------------------|
+| `false` | 200 | reachable |
+| `true` (default) | 200 | 404 |
+| `all` | 404 | 404 |
+
+Operator smoke: `GET http://localhost:4566/health` (not `/_floci/health` unless hide is `false`).
+
+### Common operator mistakes
+
+- Using `test`/`test` like upstream docs
+- Root access key ID without paired secret (operator SigV4 fails)
+- Default or missing `FLOCI_AUTH_PRESIGN_SECRET`
+- Giving operator root creds to players
+- Expecting `GetCallerIdentity` to return `:root` for IAM user keys
+- Expecting player `AWS_*` in Lambda/ECS/CodeBuild env (stripped)
+
+---
+
+## IAM and scoped resources
+
+When IAM enforcement is on, identity policies use AWS-shaped **resource ARNs** from the request (`ResourceArnBuilder`), not always `*`.
+
+| Action | Policy `Resource` | Request target |
+|--------|-------------------|----------------|
+| `iam:CreateAccessKey` | `arn:aws:iam::ACCOUNT:user/name` | `UserName` in form body |
+| `dynamodb:GetItem` | `arn:aws:dynamodb:REGION:ACCOUNT:table/name` | `TableName` in JSON |
+| `secretsmanager:GetSecretValue` | `arn:aws:secretsmanager:REGION:ACCOUNT:secret:name-*` | `SecretId` |
+| `kms:Decrypt` | `arn:aws:kms:REGION:ACCOUNT:key/KEY-ID` | `KeyId` or Floci `kms:v2:` blob in `CiphertextBlob` |
+| `sqs:ReceiveMessage` | `arn:aws:sqs:REGION:ACCOUNT:queue` | `QueueUrl` |
+| `sns:Subscribe` | `arn:aws:sns:REGION:ACCOUNT:topic` | `TopicArn` |
+| `ssm:GetParameter` | `arn:aws:ssm:REGION:ACCOUNT:parameter/path` | `Name` |
+| `cloudformation:DescribeStacks` | `arn:aws:cloudformation:REGION:ACCOUNT:stack/NAME/*` | `StackName` |
+| `s3:GetObjectVersion` | `arn:aws:s3:::bucket/key` | `versionId` query param |
+| `s3:ListBucketVersions` | `arn:aws:s3:::bucket` | `?versions` on bucket GET |
+| `sts:AssumeRole` | Role ARN + trust on role | `sts:AssumeRole` on role; trust `sts:ExternalId` when set |
+
+**Resource policies:** S3, Lambda, SQS, SNS, KMS, Secrets Manager policies merge on HTTP (identity OR resource Allow; explicit Deny wins). Account `:root` in a resource policy does **not** authorize every IAM user. With IAM enforcement on, SNS topics get **no** open default topic policy.
+
+**Not on HTTP:** in-process Step Functions / API Gateway integrations, Cognito OAuth (`/oauth2/*`), presigned POST.
+
+---
+
+## CTF implementation map
+
+| Area | Primary files |
+|------|---------------|
+| HTTP IAM + SigV4 | `IamEnforcementFilter`, `SigV4ValidationFilter`, `SigV4RequestValidator`, `SecurityBypassPaths` |
+| Identity policies | `IamPolicyEvaluator`, `IamActionRegistry`, `IamService`, `ResourceArnBuilder` |
+| Resource policies | `ResourcePolicyResolver`, `PolicyPrincipalMatcher` |
+| STS | `StsQueryHandler`, `AssumeRoleTrustPolicyEvaluator`, `IamUnrestrictedActions` |
+| Scoped IAM ARNs | `IamActionRegistry`, `ResourceArnBuilder`, `SnsService`, `SecretsManagerKmsSupport` |
+| Containers | `ContainerEnvHardening`, `OperatorCredentialEnv`, `ContainerLauncher`, `EcsContainerManager`, `CodeBuildRunner` |
+| Internal routes | `CtfInternalEndpointFilter`, `CtfHideInternalEndpointsMode` |
+| Compose / image | `docker-compose.yml`, `docker/Dockerfile` (no `test`/`test`) |
+
+**Do not assume:** `IamAuthorizationService`, `StsCallerGuard`, `CtfCredentialHardening`, `EcsContainerCredentialsServer`, in-process APIGW/SFN caller context.
+
+**Known gaps:** KMS grants API; Cognito OAuth bypass; in-process SFN/APIGW to KMS/Secrets; full AWS SigV4 presign; `GetSessionToken` parent-policy intersection; ECS task role is metadata only (no container creds endpoint).
+
+---
+
+## Enforcement surfaces
+
+| Surface | Hardened with Compose CTF env? |
+|---------|-------------------------------|
+| HTTP `:4566` | Yes (`SigV4ValidationFilter` + `IamEnforcementFilter`) |
+| S3 presigned query URLs | Partial (`PreSignedUrlFilter`) |
+| RDS / ElastiCache Redis TCP | Partial (token SigV4, not full IAM per query) |
+| Cognito OAuth | No |
+| SFN / APIGW in-process | No |
+| ECS task role at runtime | No (metadata only) |
+
+**CTF defaults:** `src/main/resources/application.yml` keeps IAM/SigV4 off for local dev; Compose turns them on. Test `application.yml` disables enforcement globally; dedicated `@QuarkusTestProfile` overrides cover CTF paths.
+
+---
+
+## Upstream sync
+
+```bash
+git fetch upstream main
+git merge upstream/main
+```
+
+Re-apply CTF behavior on conflicts:
+
+- Auth filters, `ContainerEnvHardening`, `OperatorCredentialEnv`
+- IAM/STS: `StsQueryHandler`, `IamService`, `ResourcePolicyResolver`, `ResourceArnBuilder`, `PolicyPrincipalMatcher`, `IamActionRegistry`
+- `SnsService` (`iamEnforcementEnabled` gate on default topic policy)
+- `SecretsManagerKmsSupport`, `EcsContainerManager` (`ContainerEnvHardening` in `buildEnvVars`)
+- `docker-compose.yml`, `docker/Dockerfile`, `application.yml` (`floci.ctf` block)
+
+After merge: run CTF regression below; update `README.md` and this file; verify `git diff upstream/main HEAD -- docker-compose.yml docker/Dockerfile src/main/java/io/github/hectorvent/floci/core/common/ src/main/java/io/github/hectorvent/floci/services/sns/SnsService.java`.
+
+---
+
+## CTF regression tests
+
+**Core hardening:**
+
+```bash
+./mvnw test -Dtest=HealthServicesReportingIntegrationTest,CtfHideInternalEndpointsIntegrationTest,ContainerEnvHardeningTest,EksTokenAuthenticatorTest,IamEnforcementIntegrationTest,StsAssumeRoleTrustIntegrationTest,SigV4RequestValidatorTest,PreSignedUrlIntegrationTest
+```
+
+**IAM scoping (optional, with enforcement profile tests):**
+
+```bash
+./mvnw test -Dtest=IamEnforcementIntegrationTest,ResourceArnBuilderTest,IamActionRegistryTest,StsAssumeRoleTrustIntegrationTest
+```
+
+**E2E against running instance:** `./mvnw test -pl compatibility-tests/sdk-test-java -Dtest=IamEnforcementTest`
+
+On Windows with Docker Desktop, set `DOCKER_HOST` so Maven can reach Docker before container tests (for example `npipe:////./pipe/docker_engine` in PowerShell). Default `floci.docker.docker-host` is `unix:///var/run/docker.sock`.
+
+---
+
+## Project overview (general Floci)
+
+Floci is a Java-based local AWS emulator on Quarkus. Goal: full AWS SDK and CLI compatibility through real AWS wire protocols.
 
 - Port: 4566
-- Stack:
-  - Java 25
-  - Quarkus 3.32.3
-  - JUnit 5
-  - RestAssured
-  - Jackson
-  - Docker integrations for Lambda, RDS, and ElastiCache
+- Stack: Java 25, Quarkus 3.36.0, JUnit 5, RestAssured, Jackson, Docker for Lambda/RDS/ElastiCache
 
 ---
 
-## First Principles
-
-When making changes, follow these priorities:
+## First principles (implementation)
 
 1. Preserve AWS protocol compatibility
 2. Match AWS SDK and CLI behavior
@@ -33,323 +214,139 @@ When making changes, follow these priorities:
 4. Prefer correctness over convenience
 5. Keep changes narrow and testable
 
-Critical rules:
-
-- Do not introduce custom endpoint shapes
-- Do not change request or response formats for convenience
-- Do not perform broad refactors unless the task explicitly requires them
-- Keep behavior aligned with AWS expectations and existing Floci conventions
+Critical rules: no custom endpoint shapes; no convenience wire-format changes; no broad refactors unless required.
 
 ---
 
 ## Architecture
 
-Floci follows a layered design:
+- **Controller / Handler:** parses protocol input, produces AWS-compatible responses
+- **Service:** business logic, throws `AwsException`
+- **Model:** domain objects
 
-- **Controller / Handler**
-  - Parses AWS protocol input
-  - Produces AWS-compatible responses
+**Core infrastructure:** `EmulatorConfig`, `ServiceRegistry`, `StorageBackend` + `StorageFactory`, `AwsJson11Controller`, `AwsQueryController`, `AwsException` + `AwsExceptionMapper`, `EmulatorLifecycle`
 
-- **Service**
-  - Contains business logic
-  - Throws `AwsException`
-
-- **Model**
-  - Domain objects
-
-### Core Infrastructure
-
-- `EmulatorConfig`
-- `ServiceRegistry`
-- `StorageBackend` + `StorageFactory`
-- `AwsJson11Controller`
-- `AwsQueryController`
-- `AwsException` + `AwsExceptionMapper`
-- `EmulatorLifecycle`
+**Packages:** `io.github.hectorvent.floci.config`, `core.common`, `core.storage`, `lifecycle`, `services.<service>`
 
 ---
 
-## Package Layout
+## AWS protocol rules
 
-- `io.github.hectorvent.floci.config`
-- `io.github.hectorvent.floci.core.common`
-- `io.github.hectorvent.floci.core.storage`
-- `io.github.hectorvent.floci.lifecycle`
-- `io.github.hectorvent.floci.services.<service>`
-
-Typical service structure:
-
-- `services/<svc>/`
-  - `*Controller.java`
-  - `*Service.java`
-  - `model/`
-
-Rule:
-Copy an existing service pattern before introducing a new one.
-
----
-
-## AWS Protocol Rules
-
-Floci must implement real AWS wire protocols.
-
-| Protocol | Services | Request Format | Response Format | Implementation |
-|----------|----------|----------------|-----------------|----------------|
-| Query | SQS, SNS, IAM, STS, RDS, ElastiCache, CloudFormation, CloudWatch Metrics | form-encoded POST + `Action` | XML | `AwsQueryController` |
-| JSON 1.1 | SSM, EventBridge, CloudWatch Logs, Kinesis, KMS, Cognito, Secrets Manager, ACM | POST + `X-Amz-Target` | JSON | `AwsJson11Controller` |
+| Protocol | Services | Request | Response | Implementation |
+|----------|----------|---------|----------|----------------|
+| Query | SQS, SNS, IAM, STS, RDS, ... | form POST + `Action` | XML | `AwsQueryController` |
+| JSON 1.1 | SSM, KMS, Secrets Manager, ... | POST + `X-Amz-Target` | JSON | `AwsJson11Controller` |
 | REST JSON | Lambda, API Gateway, SES V2 | REST paths | JSON | JAX-RS |
 | REST XML | S3 | REST paths | XML | JAX-RS |
-| TCP | ElastiCache, RDS | raw protocol | native | proxies |
+| TCP | ElastiCache, RDS | raw | native | proxies |
 
-### Important exceptions
-
-- CloudWatch Metrics supports both Query and JSON 1.1; handlers must remain aligned
-- SQS and SNS may expose multiple compatibility paths; do not let them drift
-- Cognito well-known endpoints are OIDC REST JSON endpoints, not AWS management APIs
-- Data-plane protocols may use raw TCP sockets
-- Management APIs should be validated with AWS SDK clients, not only handcrafted HTTP requests
+Use `XmlBuilder` / `XmlParser` (not regex). JSON errors follow AWS shapes.
 
 ---
 
-## XML / JSON Rules
+## Storage rules
 
-- Use `XmlBuilder` for XML responses
-- Use `XmlParser` for XML parsing; do not use regex
-- Use `AwsNamespaces` constants
-- JSON errors must follow AWS error structures
-- Types returned directly from controllers must remain compatible with native-image reflection requirements
+Modes: `memory`, `persistent`, `hybrid`, `wal`. Always use `StorageFactory`. Update `EmulatorConfig`, main and test `application.yml`, and lifecycle hooks when adding storage behavior.
 
 ---
 
-## Storage Rules
+## Configuration rules
 
-Supported storage modes:
-
-- `memory`
-- `persistent`
-- `hybrid`
-- `wal`
-
-Rules:
-
-- Always use `StorageFactory`
-- Do not instantiate storage implementations directly inside services
-- Respect lifecycle hooks for load and flush behavior
-
-Important nuance:
-
-Configuration interfaces may declare fallback defaults, but `application.yml` defines effective runtime behavior. Treat repository YAML as the source of truth unless a task explicitly changes configuration semantics.
-
-When adding storage-related behavior:
-
-1. Update `EmulatorConfig`
-2. Update main `application.yml`
-3. Update test `application.yml`
-4. Wire through `StorageFactory`
-5. Verify lifecycle integration
+Config under `floci.*` / `FLOCI_*`. Update `EmulatorConfig`, YAML, and docs for user-facing changes.
 
 ---
 
-## Configuration Rules
+## Build and run
 
-Configuration lives under `floci.*`.
+```bash
+./mvnw quarkus:dev
+./mvnw test
+./mvnw clean package -DskipTests
+```
 
-When adding config:
+Focused upstream-style test example:
 
-1. Add it to `EmulatorConfig`
-2. Add it to main `application.yml`
-3. Add it to test `application.yml` if needed
-4. Update documentation if user-facing
-5. Follow `FLOCI_*` environment variable conventions
+```bash
+./mvnw test -Dtest=SsmIntegrationTest
+```
 
-Critical areas:
-
-- `base-url`
-- `hostname`
-- region and account defaults
-- port ranges
-- persistence paths
-- Docker networking
+Compatibility suite: `./compatibility-tests/` (prefer AWS SDK clients over raw HTTP).
 
 ---
 
-## Build & Run
+## Testing rules
 
-    ./mvnw quarkus:dev
-    ./mvnw test
-    ./mvnw clean package
-    ./mvnw clean package -DskipTests
-
-### Focused tests
-
-    ./mvnw test -Dtest=SsmIntegrationTest
-    ./mvnw test -Dtest=SsmIntegrationTest#putParameter
+- Unit: `*ServiceTest.java`; integration: `*IntegrationTest.java`
+- Test protocol-affecting changes; prefer SDK validation
+- **CTF fork:** add or update IAM enforcement integration tests when changing scoping or filter behavior
 
 ---
 
-## Compatibility Project
+## Error handling
 
-Compatibility test suite: `./compatibility-tests/`
-
-Guidelines:
-
-- Prefer AWS SDK clients over raw HTTP for management-plane validation
-- Use this suite when changes may affect real SDK behavior
+Services throw `AwsException`. Query/REST XML use `AwsExceptionMapper`. JSON 1.1 returns structured AWS errors.
 
 ---
 
-## Testing Rules
+## Service implementation pattern
 
-### Conventions
-
-- Unit tests: `*ServiceTest.java`
-- Integration tests: `*IntegrationTest.java`
-- Prefer package-private constructors for testability
-- Integration tests may use ordered execution when stateful behavior requires it
-
-### Expectations
-
-- Test any behavior affecting AWS compatibility
-- Do not rely only on manual HTTP testing
-- Prefer SDK-based validation where possible
-
-### When touching protocol behavior
-
-If a change affects request parsing, response shape, error handling, persistence semantics, URL generation, or service enablement:
-
-1. Add or update automated tests
-2. Prefer SDK-based verification where possible
-3. Check compatibility across alternate protocol paths
-4. Document intentional deviations clearly
+1. Identify AWS protocol
+2. Reuse existing service pattern
+3. Thin controllers, `AwsException` in services
+4. Update config, storage, docs, tests together
 
 ---
 
-## Error Handling
+## Adding a new AWS service
 
-- Services should throw `AwsException`
-- Query and REST XML flows should use `AwsExceptionMapper`
-- JSON 1.1 flows should return structured AWS error responses where required
-- Controller return types must remain reflection-safe
+Create `services/<svc>/` with Controller, Service, `model/`; register in `ServiceRegistry`; wire `EmulatorConfig`, YAML, `StorageFactory`, tests, docs.
 
 ---
 
-## Service Implementation Pattern
+## Code style
 
-When adding functionality:
-
-1. Identify the AWS protocol
-2. Reuse an existing service pattern
-3. Keep controllers thin
-4. Use `AwsException` for domain errors
-5. Reuse shared utilities
-6. Update config, storage, docs, and tests together
-7. Validate behavior against AWS SDK expectations
-
----
-
-## Adding a New AWS Service
-
-1. Create a package under `services/`
-2. Add:
-   - Controller
-   - Service
-   - `model/`
-3. Register the service in `ServiceRegistry`
-4. Add config to `EmulatorConfig`
-5. Add YAML config in main and test config files
-6. Wire storage through `StorageFactory`
-7. Add tests
-8. Update documentation
-
----
-
-## Code Style
-
-- Use constructor injection
-- Prefer self-explanatory code over comments
-- Avoid unnecessary comments
-- Always use braces in conditionals
-- Follow existing project patterns
-- Use modern Java features only when they improve clarity
+Constructor injection; minimal comments; braces on all conditionals; match existing patterns.
 
 ---
 
 ## Logging
 
-- Use JBoss Logging
-- Keep logs structured
-- Avoid noisy logs in hot paths
+JBoss Logging; avoid noisy hot-path logs.
 
 ---
 
-## Pull Request Guidelines
+## Pull request guidelines
 
-- Keep changes focused
-- Avoid unrelated refactors
-- Preserve behavior unless the task explicitly requires change
-- Update docs when necessary
-- Explain missing tests when behavior changed but no automated coverage was added
-
-Conventional commits:
-
-- `feat:`
-- `fix:`
-- `perf:`
-- `docs:`
-- `chore:`
-
-Do not add `Co-Authored-By` trailers for AI tools in commit messages. Keep attribution limited to human contributors.
+Focused changes; update docs when user-visible; conventional commits (`feat:`, `fix:`, `docs:`, `chore:`). No `Co-Authored-By` for AI tools.
 
 ---
 
-## Release Awareness
-
-- Changes merged into `main` do not automatically imply a stable release
-- Release branches define stable release lines
-- Tags trigger publishing workflows
-
-Treat release workflows as critical infrastructure.
-
----
-
-## Agent Workflow
+## Agent workflow
 
 ### Before editing
 
-1. Identify service and protocol
-2. Locate an existing implementation to mirror
-3. Check config impact
-4. Check storage impact
-5. Check documentation impact
-6. Define the minimal useful test plan
+1. CTF fork: confirm whether change touches auth or upstream-shared code
+2. Identify service and protocol; mirror existing implementation
+3. Check `EmulatorConfig`, YAML, docs impact
+4. New `:4566` routes must pass JAX-RS filters unless explicitly a bypass surface
 
 ### Before finishing
 
-1. Run relevant tests
-2. Validate protocol behavior
-3. Ensure no custom endpoints were introduced
-4. Verify config and docs updates
+1. Run relevant tests (CTF regression if auth/IAM touched)
+2. Update `README.md` and this file for user-visible CTF behavior
+3. No custom endpoints; verify config and docs
+
+### When behavior is unclear
+
+Prefer AWS behavior, then existing Floci behavior, then compatibility test expectations.
 
 ---
 
-## Common Mistakes
+## Common mistakes
 
-- Creating non-AWS endpoints
+- Non-AWS endpoints
 - Bypassing `StorageFactory`
-- Changing wire formats without tests
+- Wire format changes without tests
 - Forgetting YAML updates
-- Producing inconsistent URLs or ARNs
 - Testing only with raw HTTP
-- Introducing unnecessary new patterns
-
----
-
-## Human Handoff
-
-If behavior is unclear:
-
-1. Prefer AWS behavior
-2. Then existing Floci behavior
-3. Then compatibility test expectations
-
-If a task would require broad architectural changes, stop and surface the tradeoffs instead of refactoring across services blindly.
+- Reverting CTF gates on upstream merge (`SnsService` topic policy, `PolicyPrincipalMatcher` `:root`, `ContainerEnvHardening`)

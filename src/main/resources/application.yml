@@ -109,7 +109,7 @@ floci:
     validate-signatures: false
     presign-secret: local-emulator-secret
     # root-access-key-id:   # FLOCI_AUTH_ROOT_ACCESS_KEY_ID
-    #   Set to a secret value known only to the challenge operator.
+    #   Set to a secret value known only to the operator.
     #   This key bypasses IAM enforcement (admin/provisioning use).
     #   Leave unset for strict mode with no privileged bypass.
     # root-secret-access-key:   # FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY

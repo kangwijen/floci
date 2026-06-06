@@ -12,7 +12,7 @@ import org.junit.jupiter.api.TestInstance;
 import static io.restassured.RestAssured.given;
 
 /**
- * F8: strict mode denies unmapped or unrelated IAM actions for least-privilege principals.
+ * Strict mode denies unmapped or unrelated IAM actions for least-privilege principals.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

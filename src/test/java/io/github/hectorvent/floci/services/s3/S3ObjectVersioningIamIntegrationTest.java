@@ -14,7 +14,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 
 /**
- * F1: S3 versioning IAM actions ({@code s3:ListBucketVersions}, {@code s3:GetObjectVersion}).
+ * S3 versioning IAM actions ({@code s3:ListBucketVersions}, {@code s3:GetObjectVersion}).
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

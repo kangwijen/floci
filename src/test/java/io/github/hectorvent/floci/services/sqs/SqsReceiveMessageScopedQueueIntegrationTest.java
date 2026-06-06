@@ -13,7 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
 /**
- * F4: {@code sqs:ReceiveMessage} scoped via HTTP {@code QueueUrl} parsing.
+ * {@code sqs:ReceiveMessage} scoped via HTTP {@code QueueUrl} parsing.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

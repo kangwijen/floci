@@ -115,7 +115,7 @@ class SigV4RequestValidatorTest {
         Instant now = Instant.now();
         String host = "127.0.0.1:4566";
         String path = "/";
-        String body = "{\"Name\":\"/nimbus/challenge/escalation\"}";
+        String body = "{\"Name\":\"/app/test/parameter\"}";
         byte[] payload = body.getBytes(StandardCharsets.UTF_8);
         String payloadHash = sha256Hex(payload);
 
@@ -157,7 +157,7 @@ class SigV4RequestValidatorTest {
         Instant now = Instant.now();
         String host = "127.0.0.1:4566";
         String path = "/";
-        String body = "{\"Name\":\"/nimbus/challenge/escalation\"}";
+        String body = "{\"Name\":\"/app/test/parameter\"}";
         byte[] payload = body.getBytes(StandardCharsets.UTF_8);
         String payloadHash = sha256Hex(payload);
 
@@ -180,7 +180,7 @@ class SigV4RequestValidatorTest {
         headers.putSingle("X-Amz-Date", signed.amzDate());
 
         // Tampered body: different content than what was signed
-        byte[] tamperedPayload = "{\"Name\":\"/nimbus/flag\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] tamperedPayload = "{\"Name\":\"/app/other\"}".getBytes(StandardCharsets.UTF_8);
 
         SigV4RequestValidator.Result result = SigV4RequestValidator.validate(
                 "POST",

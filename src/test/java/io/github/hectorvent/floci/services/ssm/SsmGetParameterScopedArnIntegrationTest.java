@@ -16,7 +16,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
- * F5: {@code ssm:GetParameter} scoped to one parameter ARN.
+ * {@code ssm:GetParameter} scoped to one parameter ARN.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

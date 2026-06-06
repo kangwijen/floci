@@ -13,7 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
 /**
- * F6: {@code cloudformation:DescribeStacks} scoped to one stack name.
+ * {@code cloudformation:DescribeStacks} scoped to one stack name.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)

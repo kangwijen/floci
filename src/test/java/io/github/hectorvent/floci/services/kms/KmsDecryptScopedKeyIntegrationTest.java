@@ -19,7 +19,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * F2: {@code kms:Decrypt} scoped to one CMK via {@link io.github.hectorvent.floci.services.iam.ResourceArnBuilder}.
+ * {@code kms:Decrypt} scoped to one CMK via {@link io.github.hectorvent.floci.services.iam.ResourceArnBuilder}.
  */
 @QuarkusTest
 @TestProfile(CtfLabIamEnforcementProfile.class)
