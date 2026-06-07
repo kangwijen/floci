@@ -8,12 +8,30 @@ pub fn endpoint() -> String {
     std::env::var("FLOCI_ENDPOINT").unwrap_or_else(|_| "http://localhost:4566".into())
 }
 
+fn access_key_id() -> String {
+    std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| "test".into())
+}
+
+fn secret_access_key() -> String {
+    std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| "test".into())
+}
+
+fn region() -> String {
+    std::env::var("AWS_DEFAULT_REGION").unwrap_or_else(|_| "us-east-1".into())
+}
+
 /// Returns a base AWS SDK config for the Floci endpoint.
 pub async fn base_config() -> aws_config::SdkConfig {
     let endpoint = endpoint();
-    let creds = Credentials::new("test", "test", None, None, "static");
+    let creds = Credentials::new(
+        access_key_id(),
+        secret_access_key(),
+        None,
+        None,
+        "static",
+    );
     aws_config::defaults(BehaviorVersion::latest())
-        .region(aws_types::region::Region::new("us-east-1"))
+        .region(aws_types::region::Region::new(region()))
         .credentials_provider(creds)
         .endpoint_url(endpoint)
         .load()
@@ -107,6 +125,11 @@ pub async fn pipes_client() -> aws_sdk_pipes::Client {
 /// Returns a Neptune client.
 pub async fn neptune_client() -> aws_sdk_neptune::Client {
     aws_sdk_neptune::Client::new(&base_config().await)
+}
+
+/// Returns a Cloud Map (Service Discovery) client.
+pub async fn servicediscovery_client() -> aws_sdk_servicediscovery::Client {
+    aws_sdk_servicediscovery::Client::new(&base_config().await)
 }
 
 /// Returns a minimal Lambda deployment zip with a Node.js handler.

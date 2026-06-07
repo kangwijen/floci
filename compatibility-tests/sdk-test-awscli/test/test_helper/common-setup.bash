@@ -15,11 +15,18 @@ else
     exit 1
 fi
 
-# Environment configuration
-export FLOCI_ENDPOINT="${FLOCI_ENDPOINT:-http://localhost:4566}"
-export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
+# Shared endpoint/credential exports (permissive test/test vs CTF IAM keys).
+_AWSCLI_MODULE_DIR="$(cd "${_COMMON_SETUP_DIR}/.." && pwd)"
+if [[ -f "${_AWSCLI_MODULE_DIR}/../lib/ctf-env.sh" ]]; then
+    # shellcheck source=../../lib/ctf-env.sh
+    source "${_AWSCLI_MODULE_DIR}/../lib/ctf-env.sh"
+elif [[ -f /opt/floci/ctf-env.sh ]]; then
+    # shellcheck source=/opt/floci/ctf-env.sh
+    source /opt/floci/ctf-env.sh
+else
+    echo "Error: lib/ctf-env.sh not found" >&2
+    exit 1
+fi
 
 # Helper function to run AWS CLI commands with endpoint
 aws_cmd() {

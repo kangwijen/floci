@@ -515,6 +515,55 @@ class ResourceArnBuilderTest {
         assertEquals("arn:aws:apigateway:us-east-1::/restapis/abc123", arn);
     }
 
+    // ── Cloud Map (servicediscovery) ────────────────────────────────────────────
+
+    @Test
+    void serviceDiscoveryCreateHttpNamespaceBuildsNamespaceWildcard() {
+        ContainerRequestContext ctx = jsonBodyCtx("""
+                {"Name":"demo-ns","Description":"test"}""");
+        when(ctx.getHeaderString("X-Amz-Target")).thenReturn("Route53AutoNaming_v20170314.CreateHttpNamespace");
+        String arn = builder.build("servicediscovery", ctx, REGION, ACCOUNT);
+        assertEquals("arn:aws:servicediscovery:us-east-1:222222222222:namespace/*", arn);
+    }
+
+    @Test
+    void serviceDiscoveryGetNamespaceBuildsNamespaceArn() {
+        ContainerRequestContext ctx = jsonBodyCtx("{\"Id\":\"ns-abc123\"}");
+        String arn = builder.build("servicediscovery", ctx, REGION, ACCOUNT);
+        assertEquals("arn:aws:servicediscovery:us-east-1:222222222222:namespace/ns-abc123", arn);
+    }
+
+    @Test
+    void serviceDiscoveryCreateServiceBuildsServiceWildcard() {
+        ContainerRequestContext ctx = jsonBodyCtx("""
+                {"Name":"demo-svc","NamespaceId":"ns-abc123"}""");
+        when(ctx.getHeaderString("X-Amz-Target")).thenReturn("Route53AutoNaming_v20170314.CreateService");
+        String arn = builder.build("servicediscovery", ctx, REGION, ACCOUNT);
+        assertEquals("arn:aws:servicediscovery:us-east-1:222222222222:service/*", arn);
+    }
+
+    @Test
+    void serviceDiscoveryRegisterInstanceBuildsServiceArn() {
+        ContainerRequestContext ctx = jsonBodyCtx("""
+                {"ServiceId":"srv-abc123","InstanceId":"i-1"}""");
+        String arn = builder.build("servicediscovery", ctx, REGION, ACCOUNT);
+        assertEquals("arn:aws:servicediscovery:us-east-1:222222222222:service/srv-abc123", arn);
+    }
+
+    @Test
+    void appSyncCreateGraphqlApiBuildsApisWildcard() {
+        ContainerRequestContext ctx = pathCtx("/v1/apis", jsonBodyCtx("{}"));
+        String arn = builder.build("appsync", ctx, REGION, ACCOUNT);
+        assertEquals("arn:aws:appsync:us-east-1:222222222222:apis/*", arn);
+    }
+
+    @Test
+    void appSyncGetGraphqlApiBuildsApiArn() {
+        ContainerRequestContext ctx = pathCtx("/v1/apis/abc123", jsonBodyCtx("{}"));
+        String arn = builder.build("appsync", ctx, REGION, ACCOUNT);
+        assertEquals("arn:aws:appsync:us-east-1:222222222222:apis/abc123", arn);
+    }
+
     @Test
     void secretsScopedPolicyMatchesSuffixWildcard() {
         String policy = """

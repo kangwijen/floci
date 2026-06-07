@@ -22,6 +22,7 @@ Compatibility tests for [Floci](https://github.com/hectorvent/floci) using **bot
 | `cloudwatch-metrics`    | PutMetricData, ListMetrics, GetMetricStatistics, alarms                  |
 | `cloudformation-naming` | Auto physical name generation, explicit name precedence, cross-reference |
 | `cognito`               | User pools, clients, AdminCreateUser, InitiateAuth, GetUser              |
+| `cloudmap`              | HTTP namespace, service, instance registration                           |
 
 ## Requirements
 
@@ -45,11 +46,16 @@ just test-python
 
 ## Configuration
 
-| Variable         | Default                 | Description             |
-| ---------------- | ----------------------- | ----------------------- |
-| `FLOCI_ENDPOINT` | `http://localhost:4566` | Floci emulator endpoint |
+| Variable                | Default                 | Description             |
+| ----------------------- | ----------------------- | ----------------------- |
+| `FLOCI_ENDPOINT`        | `http://localhost:4566` | Floci emulator endpoint |
+| `AWS_ACCESS_KEY_ID`     | `test`                  | IAM or operator root when enforcement is on |
+| `AWS_SECRET_ACCESS_KEY` | `test`                  | Matching secret         |
+| `AWS_DEFAULT_REGION`    | `us-east-1`             | Region                  |
 
-AWS credentials are always `test` / `test` / `us-east-1`.
+### CTF fork ([floci-ctf](https://github.com/kangwijen/floci-ctf))
+
+Most tests default to permissive `test`/`test` credentials. Against the hardened CTF image, export operator `FLOCI_AUTH_ROOT_*` or participant IAM keys as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Cloud Map tests skip when `servicediscovery` is disabled in the emulator.
 
 ## Docker
 

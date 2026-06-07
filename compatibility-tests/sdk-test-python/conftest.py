@@ -169,6 +169,12 @@ def sesv2_client(aws_config, client_config):
     return boto3.client("sesv2", config=client_config, **aws_config)
 
 
+@pytest.fixture
+def servicediscovery_client(aws_config, client_config):
+    """Create Cloud Map (Service Discovery) client."""
+    return boto3.client("servicediscovery", config=client_config, **aws_config)
+
+
 # ============================================
 # Utility Fixtures
 # ============================================

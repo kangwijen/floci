@@ -1,8 +1,10 @@
 # sdk-test-java
 
-Compatibility tests for [Floci](https://github.com/hectorvent/floci) using the **AWS SDK for Java v2 (2.31.8)**.
+Compatibility tests for [floci-ctf](https://github.com/kangwijen/floci-ctf) using the **AWS SDK for Java v2 (2.31.8)**.
 
-Runs 352 tests across 17 test classes against a live Floci instance — no mocks.
+Aligned with upstream Floci **1.5.23** and the [floci-ctf](https://github.com/kangwijen/floci-ctf) security-hardened fork.
+
+Runs against a live Floci instance — no mocks.
 
 ## Services Covered
 
@@ -20,11 +22,14 @@ Runs 352 tests across 17 test classes against a live Floci instance — no mocks
 | `SecretsManagerTest`             | Create/get/put/list/delete secrets, versioning, tags     |
 | `KmsTest`                        | Keys, aliases, encrypt/decrypt, data keys, sign/verify   |
 | `CloudWatchTest`                 | PutMetricData, ListMetrics, GetMetricStatistics, alarms  |
+| `CloudMapTest`                   | Cloud Map namespaces, services, instances, discovery     |
+| `CloudMapIamEnforcementIntegrationTest` | Cloud Map deny/allow under IAM enforcement |
 | `CloudFormationVirtualHostTests` | Virtual host style S3 access via CloudFormation          |
 | `ApigwSfnJsonataCrudlTests`      | API Gateway + Step Functions JSONata CRUDL integration   |
 | `ApiGatewayV2WebSocketAndExtendedOpsTest` | API GW v2 WebSocket APIs, Update ops, Route/Integration Responses, Models, Tagging |
 | `Ec2Tests`                       | EC2 instances, VPCs, security groups, subnets            |
 | `AppSyncTest`                    | GraphQL API CRUDL, data sources, resolvers, functions, types, API keys, tags, schema validation |
+| `AppSyncIamEnforcementIntegrationTest` | AppSync deny/allow under IAM enforcement |
 | `EcsTests`                       | ECS clusters, task definitions, services                 |
 
 ## Adding a New Test
@@ -58,12 +63,20 @@ just test-java
 | `AWS_SECRET_ACCESS_KEY` | `test` (permissive) | Matching secret |
 | `AWS_DEFAULT_REGION` | `us-east-1` | Region |
 
+`TestFixtures` reads `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for all SDK clients. In permissive mode the defaults (`test`/`test`) work unchanged. Against **floci-ctf** Compose with IAM enforcement, export operator root or participant IAM keys before running tests.
+
 ### IAM enforcement (CTF fork)
 
-`IamEnforcementTest` probes whether enforcement is enabled at runtime and skips all cases when it is off. Against **floci-ctf** Compose, set operator or provisioned IAM credentials in the environment and run:
+`TestFixtures.isIamEnforcementEnabled()` probes at runtime (unsigned IAM user, `s3:ListAllMyBuckets` → 403 means enforcement is on).
+
+`IamEnforcementTest` and `CloudMapIamEnforcementIntegrationTest` skip all cases when enforcement is off. Against **floci-ctf** Compose, set operator or provisioned IAM credentials and run:
 
 ```bash
+export FLOCI_ENDPOINT=http://localhost:4566
+export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
 mvn test -Dtest=IamEnforcementTest
+mvn test -Dtest=CloudMapIamEnforcementIntegrationTest
 ```
 
 Other test classes still default to `test`/`test` and expect permissive mode unless you override credentials globally.

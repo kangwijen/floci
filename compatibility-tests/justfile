@@ -1,14 +1,24 @@
 # SDK Compatibility Tests - Task Runner Configuration
 # Run `just` to see available commands
+#
+# dotenv-load reads compatibility-tests/.env on every recipe. Set FLOCI_CTF_PROFILE:
+#   permissive  test/test credentials (default; upstream Floci)
+#   ctf         operator FLOCI_AUTH_ROOT_* and registered AWS_* for floci-ctf
+# Host exports override .env. See env.example and lib/ctf-env.sh.
 
 set export
 set dotenv-load
 
-# Environment defaults
+# Environment defaults (overridden by .env or host exports)
 FLOCI_ENDPOINT := env('FLOCI_ENDPOINT', 'http://localhost:4566')
 AWS_ACCESS_KEY_ID := env('AWS_ACCESS_KEY_ID', 'test')
 AWS_SECRET_ACCESS_KEY := env('AWS_SECRET_ACCESS_KEY', 'test')
 AWS_DEFAULT_REGION := env('AWS_DEFAULT_REGION', 'us-east-1')
+# Passthrough for operator provisioning against floci-ctf (not used by most SDK suites)
+FLOCI_AUTH_ROOT_ACCESS_KEY_ID := env('FLOCI_AUTH_ROOT_ACCESS_KEY_ID', '')
+FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY := env('FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY', '')
+FLOCI_CTF_PROFILE := env('FLOCI_CTF_PROFILE', 'permissive')
+FLOCI_IAM_ENFORCEMENT := env('FLOCI_IAM_ENFORCEMENT', 'false')
 
 # Default recipe - list all available commands
 default:
@@ -43,6 +53,21 @@ test-awscli:
 [working-directory: 'sdk-test-java']
 test-java:
     mvn test -q
+
+# CTF fork: IAM enforcement probes (skip when enforcement is off)
+[working-directory: 'sdk-test-java']
+test-ctf-java:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source ../lib/ctf-env.sh
+    export FLOCI_CTF_PROFILE="${FLOCI_CTF_PROFILE:-ctf}"
+    export FLOCI_IAM_ENFORCEMENT="${FLOCI_IAM_ENFORCEMENT:-true}"
+    mvn test -q -Dtest=IamEnforcementTest,CloudMapIamEnforcementIntegrationTest,AppSyncIamEnforcementIntegrationTest
+
+# Optional: Cloud Map servicediscovery smoke (permissive credentials)
+[working-directory: 'sdk-test-java']
+test-cloudmap-java:
+    mvn test -q -Dtest=CloudMapTest
 
 # Run Go SDK tests (JUnit XML output via gotestsum)
 [working-directory: 'sdk-test-go']

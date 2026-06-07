@@ -172,6 +172,26 @@ class IamActionRegistryTest {
     }
 
     @Test
+    void resolvesAppSyncCreateGraphqlApiFromRestPath() {
+        ContainerRequestContext ctx = mockCtx(
+                "POST", "/v1/apis",
+                new MultivaluedHashMap<>(),
+                MediaType.APPLICATION_JSON_TYPE,
+                "{\"name\":\"demo\",\"authenticationType\":\"API_KEY\"}");
+        assertEquals("appsync:CreateGraphqlApi", registry.resolve("appsync", ctx));
+    }
+
+    @Test
+    void resolvesAppSyncGetGraphqlApiFromRestPath() {
+        ContainerRequestContext ctx = mockCtx(
+                "GET", "/v1/apis/abc123",
+                new MultivaluedHashMap<>(),
+                MediaType.APPLICATION_JSON_TYPE,
+                "");
+        assertEquals("appsync:GetGraphqlApi", registry.resolve("appsync", ctx));
+    }
+
+    @Test
     void returnsNullForUnknownRestJsonRoute() {
         ContainerRequestContext ctx = mockCtx(
                 "POST", "/some/unknown/path",

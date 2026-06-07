@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/servicediscovery"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -38,12 +39,33 @@ func Endpoint() string {
 	return "http://localhost:4566"
 }
 
+func accessKeyID() string {
+	if v := os.Getenv("AWS_ACCESS_KEY_ID"); v != "" {
+		return v
+	}
+	return "test"
+}
+
+func secretAccessKey() string {
+	if v := os.Getenv("AWS_SECRET_ACCESS_KEY"); v != "" {
+		return v
+	}
+	return "test"
+}
+
+func region() string {
+	if v := os.Getenv("AWS_DEFAULT_REGION"); v != "" {
+		return v
+	}
+	return "us-east-1"
+}
+
 // Config returns an AWS config configured for the Floci endpoint.
 func Config() aws.Config {
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion("us-east-1"),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("test", "test", "")),
+		config.WithRegion(region()),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID(), secretAccessKey(), "")),
 		config.WithBaseEndpoint(Endpoint()),
 	)
 	if err != nil {
@@ -142,6 +164,11 @@ func NeptuneClient() *neptune.Client {
 // CognitoClient returns a new Cognito Identity Provider client.
 func CognitoClient() *cognitoidentityprovider.Client {
 	return cognitoidentityprovider.NewFromConfig(Config())
+}
+
+// ServiceDiscoveryClient returns a new Cloud Map (Service Discovery) client.
+func ServiceDiscoveryClient() *servicediscovery.Client {
+	return servicediscovery.NewFromConfig(Config())
 }
 
 // ProxyHost returns the host to use for direct TCP connections to RDS/ElastiCache proxies.

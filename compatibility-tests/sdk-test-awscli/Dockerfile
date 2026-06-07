@@ -9,8 +9,9 @@ RUN git clone --depth 1 https://github.com/bats-core/bats-core.git /opt/bats-cor
     && git clone --depth 1 https://github.com/bats-core/bats-support.git /opt/bats-support \
     && git clone --depth 1 https://github.com/bats-core/bats-assert.git /opt/bats-assert
 
-COPY test/ test/
-COPY run-bats-in-container.sh /usr/local/bin/run-bats-in-container.sh
+COPY lib/ctf-env.sh /opt/floci/ctf-env.sh
+COPY sdk-test-awscli/test/ test/
+COPY sdk-test-awscli/run-bats-in-container.sh /usr/local/bin/run-bats-in-container.sh
 
 ENV FLOCI_ENDPOINT=http://floci:4566
 ENV BATS_LIB_PATH=/opt

@@ -14,7 +14,8 @@ RUN git clone --depth 1 https://github.com/bats-core/bats-core.git /opt/bats-cor
     && git clone --depth 1 https://github.com/bats-core/bats-support.git /opt/bats-support \
     && git clone --depth 1 https://github.com/bats-core/bats-assert.git /opt/bats-assert
 
-COPY . .
+COPY lib/ctf-env.sh /opt/floci/ctf-env.sh
+COPY compat-terraform/ .
 
 ENV FLOCI_ENDPOINT=http://floci:4566
 ENV AWS_ENDPOINT_URL=http://floci:4566

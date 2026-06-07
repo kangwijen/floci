@@ -1,4 +1,4 @@
-# Environment
+# Environment (lib/ctf-env.sh is tracked; only local .env is ignored)
 .env
 
 # Node

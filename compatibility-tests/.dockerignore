@@ -6,3 +6,6 @@ target/
 test-results/
 .terraform/
 .terraform.lock.hcl
+
+# Keep shared test env helper when building from compatibility-tests/ root
+!lib/ctf-env.sh

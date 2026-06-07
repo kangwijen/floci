@@ -87,7 +87,27 @@ public class IamActionRegistry {
         rule("apigateway", "POST",   ".*/restapis/.+",                      "apigateway:POST"),
 
         // ── Kinesis ────────────────────────────────────────────────────────────
-        rule("kinesis", "POST", ".*", "kinesis:*")
+        rule("kinesis", "POST", ".*", "kinesis:*"),
+
+        // ── AppSync (REST JSON) ────────────────────────────────────────────────
+        rule("appsync", "POST",   "^/v1/apis/?$",                              "appsync:CreateGraphqlApi"),
+        rule("appsync", "GET",    "^/v1/apis/?$",                              "appsync:ListGraphqlApis"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/?$",                        "appsync:GetGraphqlApi"),
+        rule("appsync", "PUT",    "^/v1/apis/[^/]+/?$",                        "appsync:UpdateGraphqlApi"),
+        rule("appsync", "DELETE", "^/v1/apis/[^/]+/?$",                        "appsync:DeleteGraphqlApi"),
+        rule("appsync", "POST",   "^/v1/apis/[^/]+/datasources/?$",            "appsync:CreateDataSource"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/datasources/?$",            "appsync:ListDataSources"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/datasources/[^/]+/?$",      "appsync:GetDataSource"),
+        rule("appsync", "PUT",    "^/v1/apis/[^/]+/datasources/[^/]+/?$",      "appsync:UpdateDataSource"),
+        rule("appsync", "DELETE", "^/v1/apis/[^/]+/datasources/[^/]+/?$",      "appsync:DeleteDataSource"),
+        rule("appsync", "POST",   "^/v1/apis/[^/]+/types/[^/]+/resolvers/?$",  "appsync:CreateResolver"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/types/[^/]+/resolvers/?$",  "appsync:ListResolvers"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/types/[^/]+/resolvers/[^/]+/?$", "appsync:GetResolver"),
+        rule("appsync", "PUT",    "^/v1/apis/[^/]+/types/[^/]+/resolvers/[^/]+/?$", "appsync:UpdateResolver"),
+        rule("appsync", "DELETE", "^/v1/apis/[^/]+/types/[^/]+/resolvers/[^/]+/?$", "appsync:DeleteResolver"),
+        rule("appsync", "POST",   "^/v1/apis/[^/]+/schemacreation/?$",         "appsync:StartSchemaCreation"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/schemacreation/?$",         "appsync:GetSchemaCreationStatus"),
+        rule("appsync", "GET",    "^/v1/apis/[^/]+/schema/?$",                 "appsync:GetIntrospectionSchema")
     );
 
     private static ActionRule rule(String service, String method, String path, String action) {

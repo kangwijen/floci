@@ -4,11 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.hectorvent.floci.services.dynamodb.DynamoDbJsonHandler;
 import io.github.hectorvent.floci.services.dynamodb.DynamoDbService;
+import io.github.hectorvent.floci.services.iam.InProcessIamAuthorizer;
+import io.github.hectorvent.floci.services.kms.KmsJsonHandler;
 import io.github.hectorvent.floci.services.lambda.LambdaExecutorService;
 import io.github.hectorvent.floci.services.lambda.LambdaFunctionStore;
 import io.github.hectorvent.floci.services.lambda.model.InvocationType;
 import io.github.hectorvent.floci.services.lambda.model.InvokeResult;
 import io.github.hectorvent.floci.services.lambda.model.LambdaFunction;
+import io.github.hectorvent.floci.services.s3.S3JsonHandler;
+import io.github.hectorvent.floci.services.secretsmanager.SecretsManagerJsonHandler;
 import io.github.hectorvent.floci.services.sqs.SqsJsonHandler;
 import io.github.hectorvent.floci.services.stepfunctions.model.Execution;
 import io.github.hectorvent.floci.services.stepfunctions.model.HistoryEvent;
@@ -74,9 +78,13 @@ class AslExecutorCatchTest {
                 mock(DynamoDbService.class),
                 mock(DynamoDbJsonHandler.class),
                 mock(SqsJsonHandler.class),
+                mock(SecretsManagerJsonHandler.class),
+                mock(KmsJsonHandler.class),
+                mock(S3JsonHandler.class),
                 objectMapper,
                 new JsonataEvaluator(objectMapper),
-                mock(Instance.class));
+                mock(Instance.class),
+                mock(InProcessIamAuthorizer.class));
     }
 
     @Test

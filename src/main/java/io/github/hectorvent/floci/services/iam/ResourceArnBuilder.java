@@ -94,6 +94,8 @@ public class ResourceArnBuilder {
             case "glue"                 -> buildGlueArn(ctx, region, accountId);
             case "athena"               -> buildAthenaArn(ctx, region, accountId);
             case "es"                   -> buildOpenSearchArn(path, region, accountId);
+            case "servicediscovery"     -> buildServiceDiscoveryArn(ctx, region, accountId);
+            case "appsync"              -> buildAppSyncArn(ctx, path, region, accountId);
             default                    -> "*";
         };
     }
@@ -1196,6 +1198,54 @@ public class ResourceArnBuilder {
             return AwsArnUtils.Arn.of("es", region, accountId, "domain/" + domain).toString();
         }
         return AwsArnUtils.Arn.of("es", region, accountId, "domain/*").toString();
+    }
+
+    // ── AppSync ──────────────────────────────────────────────────────────────────
+
+    private static final Pattern APPSYNC_API = Pattern.compile("/v1/apis/([^/]+)", Pattern.CASE_INSENSITIVE);
+
+    private String buildAppSyncArn(ContainerRequestContext ctx, String path, String region, String accountId) {
+        if (path == null || path.isBlank()) {
+            return AwsArnUtils.Arn.of("appsync", region, accountId, "apis/*").toString();
+        }
+        String normalized = path.startsWith("/") ? path : "/" + path;
+        Matcher m = APPSYNC_API.matcher(normalized);
+        if (m.find()) {
+            return AwsArnUtils.Arn.of("appsync", region, accountId, "apis/" + m.group(1)).toString();
+        }
+        return AwsArnUtils.Arn.of("appsync", region, accountId, "apis/*").toString();
+    }
+
+    // ── Cloud Map (servicediscovery) ─────────────────────────────────────────────
+
+    private String buildServiceDiscoveryArn(ContainerRequestContext ctx, String region, String accountId) {
+        String arn = firstArn(readJsonStringField(ctx, "ResourceArn"));
+        if (arn != null) {
+            return arn;
+        }
+
+        String serviceId = readJsonStringField(ctx, "ServiceId");
+        if (serviceId != null && !serviceId.isBlank()) {
+            return AwsArnUtils.Arn.of("servicediscovery", region, accountId, "service/" + serviceId).toString();
+        }
+
+        String id = readJsonStringField(ctx, "Id");
+        if (id != null && !id.isBlank()) {
+            if (id.startsWith("srv-")) {
+                return AwsArnUtils.Arn.of("servicediscovery", region, accountId, "service/" + id).toString();
+            }
+            return AwsArnUtils.Arn.of("servicediscovery", region, accountId, "namespace/" + id).toString();
+        }
+
+        String target = ctx.getHeaderString("X-Amz-Target");
+        String operation = target != null && target.contains(".")
+                ? target.substring(target.lastIndexOf('.') + 1)
+                : null;
+        if ("CreateService".equals(operation) || "ListServices".equals(operation)) {
+            return AwsArnUtils.Arn.of("servicediscovery", region, accountId, "service/*").toString();
+        }
+
+        return AwsArnUtils.Arn.of("servicediscovery", region, accountId, "namespace/*").toString();
     }
 
     // ── API Gateway (execute-api) ────────────────────────────────────────────────

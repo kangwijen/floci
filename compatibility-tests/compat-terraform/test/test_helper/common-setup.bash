@@ -18,12 +18,17 @@ else
     exit 1
 fi
 
-# Shared test helpers kept local to this module so Docker and local runs behave the same.
-export FLOCI_ENDPOINT="${FLOCI_ENDPOINT:-http://localhost:4566}"
-export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
-export AWS_ENDPOINT_URL="$FLOCI_ENDPOINT"
+# Shared endpoint/credential exports (permissive test/test vs CTF IAM keys).
+if [[ -f "${TF_DIR}/../lib/ctf-env.sh" ]]; then
+    # shellcheck source=../lib/ctf-env.sh
+    source "${TF_DIR}/../lib/ctf-env.sh"
+elif [[ -f /opt/floci/ctf-env.sh ]]; then
+    # shellcheck source=/opt/floci/ctf-env.sh
+    source /opt/floci/ctf-env.sh
+else
+    echo "Error: lib/ctf-env.sh not found" >&2
+    exit 1
+fi
 
 aws_cmd() {
     aws --endpoint-url "$FLOCI_ENDPOINT" --region "$AWS_DEFAULT_REGION" --output json "$@"
@@ -56,11 +61,11 @@ generate_backend_config() {
     cat > /tmp/floci-backend.hcl <<EOF
 bucket = "tfstate"
 key    = "floci-compat.tfstate"
-region = "us-east-1"
+region = "${AWS_DEFAULT_REGION}"
 
 endpoint                    = "${FLOCI_ENDPOINT}"
-access_key                  = "test"
-secret_key                  = "test"
+access_key                  = "${AWS_ACCESS_KEY_ID}"
+secret_key                  = "${AWS_SECRET_ACCESS_KEY}"
 skip_credentials_validation = true
 skip_region_validation      = true
 force_path_style            = true

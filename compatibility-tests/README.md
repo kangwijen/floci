@@ -1,24 +1,65 @@
 # floci-compatibility-tests
 
-Compatibility test suite for [floci-ctf](https://github.com/kangwijen/floci-ctf) — a security-hardened local AWS emulator fork.
+Compatibility test suite for [floci-ctf](https://github.com/kangwijen/floci-ctf) — a security-hardened local AWS emulator fork (upstream **1.5.23**).
 
 Verifies that standard AWS tooling (SDKs, CDK, OpenTofu/Terraform) works correctly against the emulator without modification. Tests run against a live Floci instance and use real AWS SDK clients — no mocks.
+
+## Upstream 1.5.23 highlights
+
+Merged from [floci-io/floci](https://github.com/floci-io/floci) tag **1.5.23**:
+
+| Area | Change |
+| --- | --- |
+| Cloud Map | New `servicediscovery` management API and docs |
+| AppSync | Phase 2: schema registry, AWS scalars, CRUDL completion |
+| IAM | Standard EKS cluster and node group managed policies seeded |
+| DynamoDB | Reserved keyword updates; SSE specification persistence |
+| Glue | Table version checks enforced |
+| Step Functions | `Catch` honored on Lambda task failures |
+| EC2 | `AttachTime` in `describe-instances` network interface response |
+
+`sdk-test-java` covers **AppSync** (`AppSyncTest`) and **Cloud Map** (`CloudMapTest`). Use `just test-cloudmap-java` for a focused Cloud Map run.
 
 ## CTF fork (floci-ctf)
 
 The main **floci-ctf** repository enables IAM enforcement, strict mode, and SigV4 validation in Compose. Most modules assume permissive `test`/`test` credentials in `.env`; against the hardened image you must:
 
-1. Export operator `FLOCI_AUTH_ROOT_*` (or participant IAM keys from `CreateAccessKey`).
-2. Set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` to registered credentials.
-3. Expect unsigned or `test`/`test` calls to return `403`.
+1. Set `FLOCI_CTF_PROFILE=ctf` in `.env` (see `env.example`).
+2. Export operator `FLOCI_AUTH_ROOT_*` (or participant IAM keys from `CreateAccessKey`).
+3. Set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` to registered credentials.
+4. Set `FLOCI_IAM_ENFORCEMENT=true` when targeting an enforcement-enabled instance (CTF tests probe at runtime, but this documents intent for CI and helpers).
+5. Expect unsigned or `test`/`test` calls to return `403`.
 
-`sdk-test-java` includes `IamEnforcementTest`, which **skips** when enforcement is off and runs allow/deny scenarios when `floci.services.iam.enforcement-enabled=true`. Run it against a CTF Compose instance:
+Shared helper: [`lib/ctf-env.sh`](lib/ctf-env.sh) sources profile-aware defaults for bash recipes and IaC test helpers.
+
+### CTF-focused Java tests
+
+`sdk-test-java` includes enforcement probes that **skip** when enforcement is off:
+
+| Test class | Purpose |
+| --- | --- |
+| `IamEnforcementTest` | Allow/deny IAM policy scenarios when `floci.services.iam.enforcement-enabled=true` |
+| `CloudMapIamEnforcementIntegrationTest` | Cloud Map API behaviour under IAM enforcement |
+| `AppSyncIamEnforcementIntegrationTest` | AppSync CreateGraphqlApi under IAM enforcement |
+
+Run against a CTF Compose instance:
+
+```bash
+cp env.example .env
+# edit .env: FLOCI_CTF_PROFILE=ctf, FLOCI_IAM_ENFORCEMENT=true, FLOCI_AUTH_ROOT_*, AWS_*
+
+just test-ctf-java
+```
+
+Or manually:
 
 ```bash
 export FLOCI_ENDPOINT=http://localhost:4566
+export FLOCI_CTF_PROFILE=ctf
+export FLOCI_IAM_ENFORCEMENT=true
 export AWS_ACCESS_KEY_ID="$FLOCI_AUTH_ROOT_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY"
-cd sdk-test-java && mvn test -Dtest=IamEnforcementTest
+cd sdk-test-java && mvn test -Dtest=IamEnforcementTest,CloudMapIamEnforcementIntegrationTest
 ```
 
 S3 presign tests use the AWS SDK presigner and work when the signing access key is registered in IAM (or matches the operator root pair).
@@ -36,33 +77,37 @@ cp env.example .env
 # Install dependencies
 just setup
 
-# Run all tests
+# Run all SDK tests (permissive profile)
 just test-all
 
 # Run specific SDK tests
 just test-python
 just test-typescript
 just test-awscli
+
+# CTF enforcement probes (requires floci-ctf + ctf profile in .env)
+just test-ctf-java
+
+# IaC compatibility (CDK, Terraform, OpenTofu)
+just test-compat
 ```
 
-## Test Runners
+## Test matrix
 
-| Module                                | Language       | Test Framework | Command                |
-| ------------------------------------- | -------------- | -------------- | ---------------------- |
-| [`sdk-test-python`](sdk-test-python/) | Python 3       | pytest         | `just test-python`     |
-| [`sdk-test-node`](sdk-test-node/)     | TypeScript     | vitest         | `just test-typescript` |
-| [`sdk-test-awscli`](sdk-test-awscli/) | Bash / AWS CLI | bats-core      | `just test-awscli`     |
-| [`sdk-test-java`](sdk-test-java/)     | Java 17        | JUnit 5        | `just test-java`       |
-| [`sdk-test-go`](sdk-test-go/)         | Go 1.24        | go test        | `just test-go`         |
-| [`sdk-test-rust`](sdk-test-rust/)     | Rust           | cargo-nextest  | `just test-rust`       |
-
-### IaC Compatibility
-
-| Module                                  | Tool       | Command    |
-| --------------------------------------- | ---------- | ---------- |
-| [`compat-cdk`](compat-cdk/)             | AWS CDK v2 | `./run.sh` |
-| [`compat-opentofu`](compat-opentofu/)   | OpenTofu   | `./run.sh` |
-| [`compat-terraform`](compat-terraform/) | Terraform  | `./run.sh` |
+| Module | Language / tool | Command | CTF enforcement |
+| --- | --- | --- | --- |
+| [`sdk-test-python`](sdk-test-python/) | Python 3 / pytest | `just test-python` | permissive (`test`/`test`) |
+| [`sdk-test-node`](sdk-test-node/) | TypeScript / vitest | `just test-typescript` | permissive |
+| [`sdk-test-awscli`](sdk-test-awscli/) | Bash / bats-core | `just test-awscli` | permissive (sources `lib/ctf-env.sh` when configured) |
+| [`sdk-test-java`](sdk-test-java/) | Java 17 / JUnit 5 | `just test-java` | permissive default |
+| [`sdk-test-java`](sdk-test-java/) | Java 17 / JUnit 5 | `just test-ctf-java` | **required** (`IamEnforcementTest`, `CloudMapIamEnforcement`) |
+| [`sdk-test-java`](sdk-test-java/) | Java 17 / JUnit 5 | `just test-cloudmap-java` | permissive (Cloud Map smoke) |
+| [`sdk-test-go`](sdk-test-go/) | Go 1.24 / go test | `just test-go` | permissive |
+| [`sdk-test-rust`](sdk-test-rust/) | Rust / cargo-nextest | `just test-rust` | permissive |
+| [`compat-cdk`](compat-cdk/) | AWS CDK v2 | `just test-cdk` or `./run.sh` | use `FLOCI_CTF_PROFILE=ctf` + registered keys |
+| [`compat-terraform`](compat-terraform/) | Terraform | `just test-terraform` or `./run.sh` | use `FLOCI_CTF_PROFILE=ctf` + registered keys |
+| [`compat-opentofu`](compat-opentofu/) | OpenTofu | `just test-opentofu` or `./run.sh` | use `FLOCI_CTF_PROFILE=ctf` + registered keys |
+| IaC (all) | CDK + TF + OpenTofu | `just test-compat` | same as individual IaC modules |
 
 ## Prerequisites
 
@@ -72,14 +117,14 @@ just test-awscli
 
 Per-module requirements:
 
-| Module            | Requirements                        |
-| ----------------- | ----------------------------------- |
-| `sdk-test-python` | Python 3.9+, pip                    |
-| `sdk-test-node`   | Node.js 20+, npm, vitest            |
-| `sdk-test-awscli` | AWS CLI v2, bash, jq                |
-| `sdk-test-java`   | Java 17+, Maven                     |
-| `sdk-test-go`     | Go 1.24+                            |
-| `sdk-test-rust`   | Rust (stable), Cargo, cargo-nextest |
+| Module | Requirements |
+| --- | --- |
+| `sdk-test-python` | Python 3.9+, pip |
+| `sdk-test-node` | Node.js 20+, npm, vitest |
+| `sdk-test-awscli` | AWS CLI v2, bash, jq |
+| `sdk-test-java` | Java 17+, Maven |
+| `sdk-test-go` | Go 1.24+ |
+| `sdk-test-rust` | Rust (stable), Cargo, cargo-nextest |
 
 ## Setup
 
@@ -112,6 +157,24 @@ just test-typescript
 
 # AWS CLI (bats-core)
 just test-awscli
+
+# Java (full suite, permissive)
+just test-java
+
+# Java CTF enforcement probes
+just test-ctf-java
+
+# Cloud Map only
+just test-cloudmap-java
+```
+
+### IaC compatibility
+
+```bash
+just test-compat          # CDK + Terraform + OpenTofu
+just test-cdk
+just test-terraform
+just test-opentofu
 ```
 
 Bats-based suites keep their normal console output and also write JUnit XML reports:
@@ -123,20 +186,28 @@ Bats-based suites keep their normal console output and also write JUnit XML repo
 
 ## Configuration
 
-All modules read from environment variables (see `env.example`):
+All modules read from environment variables. Copy `env.example` to `.env` (loaded by `just` via `dotenv-load`):
 
 ```bash
 FLOCI_ENDPOINT=http://localhost:4566
 AWS_DEFAULT_REGION=us-east-1
 
-# Permissive mode (default for most suite tests):
+# Permissive profile (default for most suite tests):
+FLOCI_CTF_PROFILE=permissive
+FLOCI_IAM_ENFORCEMENT=false
 AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
 
-# CTF fork: replace with IAM or operator root credentials
+# CTF profile (floci-ctf Compose):
+# FLOCI_CTF_PROFILE=ctf
+# FLOCI_IAM_ENFORCEMENT=true
+# AWS_ACCESS_KEY_ID=AKIA...
+# AWS_SECRET_ACCESS_KEY=...
+# FLOCI_AUTH_ROOT_ACCESS_KEY_ID=AKIA...
+# FLOCI_AUTH_ROOT_SECRET_ACCESS_KEY=...
 ```
 
-Copy `env.example` to `.env` and adjust for your Floci profile.
+`FLOCI_IAM_ENFORCEMENT` is a documentation hint for CI and bash helpers; Java enforcement tests still detect enforcement at runtime via API behaviour.
 
 ## Running with Docker
 

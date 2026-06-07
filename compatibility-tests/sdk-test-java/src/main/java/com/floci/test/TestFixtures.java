@@ -63,6 +63,12 @@ import software.amazon.awssdk.services.lambda.model.InvokeRequest;
 import software.amazon.awssdk.services.lambda.model.InvokeResponse;
 import software.amazon.awssdk.services.lambda.model.InvocationType;
 import software.amazon.awssdk.services.lambda.model.Runtime;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.iam.model.CreateAccessKeyRequest;
+import software.amazon.awssdk.services.iam.model.CreateAccessKeyResponse;
+import software.amazon.awssdk.services.iam.model.CreateUserRequest;
+import software.amazon.awssdk.services.iam.model.DeleteAccessKeyRequest;
+import software.amazon.awssdk.services.iam.model.DeleteUserRequest;
 
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
@@ -91,8 +97,11 @@ public final class TestFixtures {
 
     private static final Region REGION = Region.US_EAST_1;
 
+    private static final String ACCESS_KEY_ID = envOrDefault("AWS_ACCESS_KEY_ID", "test");
+    private static final String SECRET_ACCESS_KEY = envOrDefault("AWS_SECRET_ACCESS_KEY", "test");
+
     private static final StaticCredentialsProvider CREDENTIALS =
-            StaticCredentialsProvider.create(AwsBasicCredentials.create("test", "test"));
+            StaticCredentialsProvider.create(AwsBasicCredentials.create(ACCESS_KEY_ID, SECRET_ACCESS_KEY));
 
     private TestFixtures() {}
 
@@ -129,6 +138,79 @@ public final class TestFixtures {
      */
     public static String proxyHost() {
         return ENDPOINT.getHost();
+    }
+
+    private static String envOrDefault(String name, String defaultValue) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value;
+    }
+
+    // ============================================
+    // IAM enforcement availability probe
+    // ============================================
+
+    private static volatile Boolean iamEnforcementEnabled;
+
+    /**
+     * Probes whether IAM enforcement is active by creating an IAM user with no
+     * policies and calling {@code s3:ListAllMyBuckets}. Returns {@code true} when
+     * the call is denied (HTTP 403), {@code false} when it succeeds.
+     *
+     * <p>Requires admin credentials ({@code AWS_ACCESS_KEY_ID} / {@code AWS_SECRET_ACCESS_KEY})
+     * that can create IAM users when enforcement is enabled.
+     *
+     * <p>Result is memoized for the JVM lifetime.
+     */
+    public static boolean isIamEnforcementEnabled() {
+        if (iamEnforcementEnabled != null) {
+            return iamEnforcementEnabled;
+        }
+        synchronized (TestFixtures.class) {
+            if (iamEnforcementEnabled != null) {
+                return iamEnforcementEnabled;
+            }
+            String probeUser = "iam-enf-probe-" + UUID.randomUUID().toString().substring(0, 8);
+            String probeAkid = null;
+            String probeSecret = null;
+            try (IamClient iam = iamClient()) {
+                iam.createUser(CreateUserRequest.builder().userName(probeUser).build());
+                CreateAccessKeyResponse keyResp = iam.createAccessKey(
+                        CreateAccessKeyRequest.builder().userName(probeUser).build());
+                probeAkid = keyResp.accessKey().accessKeyId();
+                probeSecret = keyResp.accessKey().secretAccessKey();
+
+                S3Client probeS3 = S3Client.builder()
+                        .endpointOverride(ENDPOINT)
+                        .region(REGION)
+                        .credentialsProvider(StaticCredentialsProvider.create(
+                                AwsBasicCredentials.create(probeAkid, probeSecret)))
+                        .forcePathStyle(true)
+                        .build();
+                try {
+                    probeS3.listBuckets();
+                    iamEnforcementEnabled = false;
+                } catch (S3Exception e) {
+                    iamEnforcementEnabled = e.statusCode() == 403;
+                } finally {
+                    probeS3.close();
+                }
+            } catch (Exception e) {
+                iamEnforcementEnabled = false;
+            } finally {
+                if (probeAkid != null) {
+                    try (IamClient iam = iamClient()) {
+                        iam.deleteAccessKey(DeleteAccessKeyRequest.builder()
+                                .userName(probeUser).accessKeyId(probeAkid).build());
+                        iam.deleteUser(DeleteUserRequest.builder().userName(probeUser).build());
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            return iamEnforcementEnabled;
+        }
     }
 
     // ============================================
