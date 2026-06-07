@@ -19,7 +19,7 @@
 
 # Floci CTF
 
-A security-hardened fork of [Floci](https://github.com/floci-io/floci) (upstream **1.5.22**, Quarkus **3.36.0**) for capture-the-flag and security exercises. Same local AWS emulator on port **4566**, with IAM enforcement, strict policy mode, SigV4 validation, and CTF-specific controls so participants cannot rely on permissive `test`/`test` credentials, unsigned requests, or internal introspection routes.
+A security-hardened fork of [Floci](https://github.com/floci-io/floci) (upstream **1.5.23**, Quarkus **3.36.0**) for capture-the-flag and security exercises. Same local AWS emulator on port **4566**, with IAM enforcement, strict policy mode, SigV4 validation, and CTF-specific controls so participants cannot rely on permissive `test`/`test` credentials, unsigned requests, or internal introspection routes.
 
 For service coverage, architecture, SDK examples, and general configuration, use the [upstream Floci README](https://github.com/floci-io/floci/blob/main/README.md) and [docs](https://floci.io/floci/). For operators, agents, and `floci:local` behavior, see [AGENT.md](./AGENT.md).
 
@@ -152,6 +152,20 @@ On Windows with Docker Desktop, set `$env:DOCKER_HOST = "npipe:////./pipe/docker
 | CTF hardening and IAM behaviour | [docs/services/iam.md](./docs/services/iam.md#ctf-hardening) |
 | Compose CTF profile | [docs/configuration/docker-compose.md](./docs/configuration/docker-compose.md#ctf-security-profile) |
 | All `FLOCI_*` variables | [docs/configuration/environment-variables.md](./docs/configuration/environment-variables.md) |
+
+## Upstream 1.5.23 highlights
+
+Merged from [floci-io/floci](https://github.com/floci-io/floci) tag **1.5.23**:
+
+| Area | Change |
+|---|---|
+| Cloud Map | New `servicediscovery` management API and docs |
+| AppSync | Phase 2: schema registry, AWS scalars, CRUDL completion |
+| IAM | Standard EKS cluster and node group managed policies seeded |
+| DynamoDB | Reserved keyword updates; SSE specification persistence |
+| Glue | Table version checks enforced |
+| Step Functions | `Catch` honored on Lambda task failures |
+| EC2 | `AttachTime` in `describe-instances` network interface response |
 
 ## Upstream sync
 

@@ -79,7 +79,7 @@ public class GlueJsonHandler {
             case "UpdateTable" -> {
                 String dbName = request.get("DatabaseName").asText();
                 Table table = mapper.treeToValue(request.get("TableInput"), Table.class);
-                glueService.updateTable(dbName, table);
+                glueService.updateTable(dbName, table, request.path("VersionId").asText(null));
                 yield Response.ok().build();
             }
             case "GetTableVersions" -> {
