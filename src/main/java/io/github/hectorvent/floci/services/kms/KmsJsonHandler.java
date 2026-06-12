@@ -65,9 +65,11 @@ public class KmsJsonHandler {
             case "ListResourceTags" -> handleListResourceTags(request, region);
             case "GetKeyPolicy" -> handleGetKeyPolicy(request, region);
             case "PutKeyPolicy" -> handlePutKeyPolicy(request, region);
+            case "UpdateKeyDescription" -> handleUpdateKeyDescription(request, region);
             case "GetKeyRotationStatus" -> handleGetKeyRotationStatus(request, region);
             case "EnableKeyRotation" -> handleEnableKeyRotation(request, region);
             case "DisableKeyRotation" -> handleDisableKeyRotation(request, region);
+            case "DisableKey" -> handleDisableKey(request, region);
             case "RotateKeyOnDemand" -> handleRotateKeyOnDemand(request, region);
             default -> Response.status(400)
                     .entity(new AwsErrorResponse("UnsupportedOperation", "Operation " + action + " is not supported."))
@@ -475,6 +477,22 @@ public class KmsJsonHandler {
         return Response.ok(objectMapper.createObjectNode()).build();
     }
 
+    private Response handleUpdateKeyDescription(JsonNode request, String region) {
+        service.updateKeyDescription(
+                request.path("KeyId").asText(),
+                requiredText(request, "Description"),
+                region);
+        return Response.ok(objectMapper.createObjectNode()).build();
+    }
+
+    private String requiredText(JsonNode request, String field) {
+        JsonNode value = request.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            throw new AwsException("ValidationException", field + " is required", 400);
+        }
+        return value.asText();
+    }
+
     private Response handleGetKeyRotationStatus(JsonNode request, String region) {
         String keyId = request.path("KeyId").asText();
         boolean enabled = service.getKeyRotationStatus(keyId, region);
@@ -490,6 +508,11 @@ public class KmsJsonHandler {
 
     private Response handleDisableKeyRotation(JsonNode request, String region) {
         service.disableKeyRotation(request.path("KeyId").asText(), region);
+        return Response.ok(objectMapper.createObjectNode()).build();
+    }
+
+    private Response handleDisableKey(JsonNode request, String region) {
+        service.disableKey(request.path("KeyId").asText(), region);
         return Response.ok(objectMapper.createObjectNode()).build();
     }
 

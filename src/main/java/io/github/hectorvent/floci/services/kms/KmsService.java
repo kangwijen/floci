@@ -583,6 +583,13 @@ public class KmsService {
         LOG.infov("Updated key policy for KMS key: {0} in {1}", key.getKeyId(), region);
     }
 
+    public void updateKeyDescription(String keyId, String description, String region) {
+        KmsKey key = resolveKey(keyId, region);
+        key.setDescription(description);
+        keyStore.put(region + "::" + key.getKeyId(), key);
+        LOG.infov("Updated description for KMS key: {0} in {1}", key.getKeyId(), region);
+    }
+
     // ──────────────────────────── Key Rotation ────────────────────────────
 
     public boolean getKeyRotationStatus(String keyId, String region) {
@@ -608,6 +615,14 @@ public class KmsService {
         key.setKeyRotationEnabled(false);
         keyStore.put(region + "::" + key.getKeyId(), key);
         LOG.infov("Disabled key rotation for KMS key: {0} in {1}", key.getKeyId(), region);
+    }
+
+    public void disableKey(String keyId, String region) {
+        KmsKey key = resolveKey(keyId, region);
+        key.setEnabled(false);
+        key.setKeyState("Disabled");
+        keyStore.put(region + "::" + key.getKeyId(), key);
+        LOG.infov("Disabled KMS key: {0} in {1}", key.getKeyId(), region);
     }
 
     private static final int ON_DEMAND_ROTATION_LIMIT = 25;

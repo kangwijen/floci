@@ -104,6 +104,25 @@ function_input() {
     found=$(echo "$output" | jq --arg name "$DB_NAME" '.DatabaseList | any(.Name == $name)')
     [ "$found" = "true" ]
 
+    run aws_cmd glue update-database \
+        --name "$DB_NAME" \
+        --database-input "{\"Name\":\"$DB_NAME\",\"Description\":\"updated database\",\"LocationUri\":\"s3://floci-glue-catalog/$DB_NAME/\"}"
+    assert_success
+
+    run aws_cmd glue get-database --name "$DB_NAME"
+    assert_success
+    description=$(json_get "$output" '.Database.Description')
+    location=$(json_get "$output" '.Database.LocationUri')
+    [ "$description" = "updated database" ]
+    [ "$location" = "s3://floci-glue-catalog/$DB_NAME/" ]
+
+    run aws_cmd glue update-database \
+        --name "$DB_NAME" \
+        --database-input "{\"Name\":\"${DB_NAME}-renamed\",\"Description\":\"renamed database\"}"
+    assert_failure
+    [[ "$output" == *"InvalidInputException"* ]]
+    [[ "$output" == *"Database cannot be renamed"* ]]
+
     run aws_cmd glue delete-database --name "$DB_NAME"
     assert_success
 
@@ -148,6 +167,21 @@ function_input() {
     version_id=$(json_get "$output" '.Table.VersionId')
     [ "$description" = "updated" ]
     [ "$version_id" = "1" ]
+
+    run aws_cmd glue get-table-versions \
+        --database-name "$DB_NAME" \
+        --table-name "$TABLE_NAME"
+    assert_success
+    version_count=$(echo "$output" | jq '.TableVersions | length')
+    current_version=$(json_get "$output" '.TableVersions[0].VersionId')
+    current_description=$(json_get "$output" '.TableVersions[0].Table.Description')
+    archived_version=$(json_get "$output" '.TableVersions[1].VersionId')
+    archived_description=$(json_get "$output" '.TableVersions[1].Table.Description')
+    [ "$version_count" = "2" ]
+    [ "$current_version" = "1" ]
+    [ "$current_description" = "updated" ]
+    [ "$archived_version" = "0" ]
+    [ "$archived_description" = "created" ]
 
     run aws_cmd glue create-partition \
         --database-name "$DB_NAME" \

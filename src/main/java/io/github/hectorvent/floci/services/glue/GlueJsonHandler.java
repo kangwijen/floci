@@ -47,7 +47,11 @@ public class GlueJsonHandler {
         return switch (action) {
             case "CreateDatabase" -> {
                 Database db = mapper.treeToValue(request.get("DatabaseInput"), Database.class);
-                glueService.createDatabase(db);
+                @SuppressWarnings("unchecked")
+                Map<String, String> tags = request.has("Tags")
+                        ? mapper.convertValue(request.get("Tags"), Map.class)
+                        : null;
+                glueService.createDatabase(db, tags, region);
                 yield Response.ok().build();
             }
             case "GetDatabase" -> {
@@ -60,7 +64,13 @@ public class GlueJsonHandler {
             }
             case "DeleteDatabase" -> {
                 String name = request.get("Name").asText();
-                glueService.deleteDatabase(name);
+                glueService.deleteDatabase(name, region);
+                yield Response.ok().build();
+            }
+            case "UpdateDatabase" -> {
+                String name = request.get("Name").asText();
+                Database db = mapper.treeToValue(request.get("DatabaseInput"), Database.class);
+                glueService.updateDatabase(name, db);
                 yield Response.ok().build();
             }
             case "CreateTable" -> {
@@ -82,11 +92,14 @@ public class GlueJsonHandler {
             case "UpdateTable" -> {
                 String dbName = request.get("DatabaseName").asText();
                 Table table = mapper.treeToValue(request.get("TableInput"), Table.class);
-                glueService.updateTable(dbName, table, request.path("VersionId").asText(null));
+                glueService.updateTable(dbName, table, request.path("VersionId").asText(null),
+                        request.path("SkipArchive").asBoolean(false));
                 yield Response.ok().build();
             }
             case "GetTableVersions" -> {
-                yield Response.ok(Map.of("TableVersions", glueService.getTableVersions())).build();
+                String dbName = request.get("DatabaseName").asText();
+                String tableName = request.get("TableName").asText();
+                yield Response.ok(Map.of("TableVersions", glueService.getTableVersions(dbName, tableName))).build();
             }
             case "DeleteTable" -> {
                 String dbName = request.get("DatabaseName").asText();

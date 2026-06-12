@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.24] - 2026-06-11
+
+### Added
+
+- **cloudtrail:** trail lifecycle support ([#1256](https://github.com/floci-io/floci/pull/1256))
+- **cloudmap:** AWS Cloud Map (servicediscovery) management API ([#1217](https://github.com/floci-io/floci/pull/1217))
+- **ec2:** provisioning primitives — launch templates, VPC endpoints, NAT gateways, instance type offerings ([#1252](https://github.com/floci-io/floci/pull/1252))
+- **ec2:** auto-create default security group and main route table on `CreateVpc` ([#1177](https://github.com/floci-io/floci/pull/1177))
+- **eks:** support managed node groups ([#1226](https://github.com/floci-io/floci/pull/1226))
+- **kms:** key state and description operations (`DisableKey`, `UpdateKeyDescription`) ([#1251](https://github.com/floci-io/floci/pull/1251))
+- **cognito:** verification code subsystem ([#1249](https://github.com/floci-io/floci/pull/1249))
+- **athena:** support `DeleteWorkGroup` ([#1213](https://github.com/floci-io/floci/pull/1213)); align `CreateWorkGroup` with AWS ([#1174](https://github.com/floci-io/floci/pull/1174))
+- **glue:** register database tags with the Resource Groups Tagging API ([#1248](https://github.com/floci-io/floci/pull/1248)); support `UpdateDatabase` ([#1232](https://github.com/floci-io/floci/pull/1232)); archive table versions and return them from `GetTableVersions` ([#1233](https://github.com/floci-io/floci/pull/1233))
+- **elbv2:** align `DescribeLoadBalancers` availability zones with AWS behavior ([#1206](https://github.com/floci-io/floci/pull/1206))
+- **ses:** publish events to Firehose, EventBridge, and CloudWatch ([#1188](https://github.com/floci-io/floci/pull/1188))
+- **cloudformation:** provision `AWS::StepFunctions::StateMachine` ([#1152](https://github.com/floci-io/floci/pull/1152))
+- **s3:** stream range responses ([#1255](https://github.com/floci-io/floci/pull/1255))
+- **parity:** emit LocalStack-compatible `Ready.` log line on startup ([#1284](https://github.com/floci-io/floci/pull/1284))
+
+### Fixed
+
+- **athena:** align `ListWorkGroups` with AWS behavior ([#1259](https://github.com/floci-io/floci/pull/1259))
+- **elasticache:** return reachable Memcached configuration endpoints ([#1258](https://github.com/floci-io/floci/pull/1258))
+- **elbv2:** validate subnet VPC consistency for load balancers ([#1244](https://github.com/floci-io/floci/pull/1244))
+- **msk:** poll the correct Redpanda admin readiness endpoint ([#1237](https://github.com/floci-io/floci/pull/1237))
+- **lambda:** normalize backslash ZIP path separators on extraction ([#1215](https://github.com/floci-io/floci/pull/1215))
+- **s3:** reject relative object keys ([#1235](https://github.com/floci-io/floci/pull/1235))
+- **glue:** preserve column parameters ([#1210](https://github.com/floci-io/floci/pull/1210)); support `BatchDeleteTable` ([#1209](https://github.com/floci-io/floci/pull/1209)); normalize catalog names ([#1208](https://github.com/floci-io/floci/pull/1208))
+- **docker:** fall back to the default command when entrypoint argv is empty ([#1283](https://github.com/floci-io/floci/pull/1283))
+- **cloudmap:** avoid `SecureRandom` in the native image heap ([#1271](https://github.com/floci-io/floci/pull/1271), [#1289](https://github.com/floci-io/floci/pull/1289))
+
+### Documentation
+
+- adopt the AGENTS.md standard and update references ([#1225](https://github.com/floci-io/floci/pull/1225), [#1272](https://github.com/floci-io/floci/pull/1272))
+- **cloudmap:** add service docs ([#1221](https://github.com/floci-io/floci/pull/1221))
+
 ## [1.5.23] - 2026-06-07
 
 ### Added

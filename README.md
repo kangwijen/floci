@@ -19,7 +19,7 @@
 
 # Floci CTF
 
-A security-hardened fork of [Floci](https://github.com/floci-io/floci) (upstream **1.5.23**, Quarkus **3.36.0**) for capture-the-flag and security exercises. Same local AWS emulator on port **4566**, with IAM enforcement, strict policy mode, SigV4 validation, and CTF-specific controls so participants cannot rely on permissive `test`/`test` credentials, unsigned requests, or internal introspection routes.
+A security-hardened fork of [Floci](https://github.com/floci-io/floci) (upstream **1.5.24**, Quarkus **3.36.0**) for capture-the-flag and security exercises. Same local AWS emulator on port **4566**, with IAM enforcement, strict policy mode, SigV4 validation, and CTF-specific controls so participants cannot rely on permissive `test`/`test` credentials, unsigned requests, or internal introspection routes.
 
 For service coverage, architecture, SDK examples, and general configuration, use the [upstream Floci README](https://github.com/floci-io/floci/blob/main/README.md) and [docs](https://floci.io/floci/). For operators, agents, and `floci:local` behavior, see [AGENTS.md](./AGENTS.md).
 
@@ -156,13 +156,20 @@ On Windows with Docker Desktop, set `$env:DOCKER_HOST = "npipe:////./pipe/docker
 | Compose CTF profile | [docs/configuration/docker-compose.md](./docs/configuration/docker-compose.md#ctf-security-profile) |
 | All `FLOCI_*` variables | [docs/configuration/environment-variables.md](./docs/configuration/environment-variables.md) |
 
+Init scripts mounted under `/etc/localstack/init/` run unchanged. The `/_localstack/init` and `/_localstack/health` endpoints are still served. Once the emulator is up, the log also ends with a LocalStack-style `Ready.` line, so tooling that watches the log for it, such as the default wait strategy of Testcontainers' `LocalStackContainer`, works unchanged. Set `LOCALSTACK_PARITY=false` to opt out of automatic translation.
+
 ## Upstream highlights
 
-Merged from [floci-io/floci](https://github.com/floci-io/floci) **1.5.23** and follow-on commits:
+Merged from [floci-io/floci](https://github.com/floci-io/floci) **1.5.24** and follow-on commits:
 
 | Area | Change |
 |---|---|
 | Cloud Map | New `servicediscovery` management API and docs |
+| CloudTrail | Trail lifecycle support |
+| Cognito | Verification code subsystem (SNS/SES inspection) |
+| EC2 | Provisioning primitives (launch templates, NAT gateways, VPC endpoints) |
+| KMS | Key state and description operations |
+| S3 | Range response streaming; relative key rejection |
 | AppSync | Phase 2: schema registry, AWS scalars, CRUDL completion |
 | IAM | Standard EKS cluster and node group managed policies seeded |
 | DynamoDB | Reserved keyword updates; SSE specification persistence |

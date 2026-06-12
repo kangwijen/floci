@@ -32,3 +32,4 @@ test-results
 .env
 .cursor/
 FLOCI.md
+scripts/node_modules/

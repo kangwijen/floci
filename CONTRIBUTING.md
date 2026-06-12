@@ -123,7 +123,7 @@ Do not include `Co-Authored-By` trailers for AI tools in commit messages. Attrib
 
 See [AGENTS.md](AGENTS.md) for CTF fork operator guidance, IAM hardening, and the three-layer architecture (Controller → Service → Storage).
 
-`AGENTS.md` is the canonical agent instructions file for this repository. If your coding agent expects a different filename, create a local symlink to `AGENTS.md` instead of copying the file.
+`AGENTS.md` is the canonical agent instructions file for this repository, following the [AGENTS.md standard](https://agents.md/). If your coding agent expects a different filename, create a local symlink to `AGENTS.md` instead of copying the file.
 
 ```bash
 ln -s AGENTS.md CLAUDE.md
